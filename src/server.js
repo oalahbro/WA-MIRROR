@@ -58,6 +58,37 @@ if (!AUTH_TOKEN || AUTH_TOKEN === "ganti-dengan-token-rahasia-panjang") {
 const app = express();
 app.use(express.json());
 
+// ---------- header keamanan ----------
+// Diterapkan ke semua respons. CSP disetel agar fitur tetap jalan: QR (data:),
+// thumbnail base64 (data:), media/bubble optimistik (blob:), /api/media (self),
+// dan warna swatch inline (style 'unsafe-inline').
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");                 // anti-clickjacking
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Content-Security-Policy",
+    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; " +
+    "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
+    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  next();
+});
+
+// ---------- rate-limit login (anti brute-force, tanpa dependency) ----------
+// Hanya percobaan GAGAL yang dihitung (global, jendela 60 dtk). Token benar tak
+// pernah kena limit, jadi polling normal & login sah aman. Lewat ambang → 429.
+const failedLogins = [];
+const LOGIN_WINDOW_MS = 60 * 1000;
+const LOGIN_MAX_FAIL = 15;
+function loginLimiter(req, res, next) {
+  const now = Date.now();
+  while (failedLogins.length && now - failedLogins[0] > LOGIN_WINDOW_MS) failedLogins.shift();
+  if (failedLogins.length >= LOGIN_MAX_FAIL) {
+    return res.status(429).json({ ok: false, error: "terlalu banyak percobaan, coba lagi sebentar" });
+  }
+  next();
+}
+
 // ---------- auth middleware ----------
 function requireAuth(req, res, next) {
   const token =
@@ -69,9 +100,11 @@ function requireAuth(req, res, next) {
 }
 
 // ---------- API ----------
-app.get("/api/login", (req, res) => {
+app.get("/api/login", loginLimiter, (req, res) => {
   const token = req.query.token || req.get("x-auth-token");
-  res.json({ ok: token === AUTH_TOKEN });
+  const okToken = token === AUTH_TOKEN;
+  if (!okToken) failedLogins.push(Date.now()); // catat hanya yang gagal
+  res.json({ ok: okToken });
 });
 
 app.get("/api/status", requireAuth, (req, res) => {
