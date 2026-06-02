@@ -1,0 +1,20 @@
+[Unit]
+Description=WA Mirror (WhatsApp always-on mirror)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# GANTI "ubuntu" dengan username VPS-mu, dan path bila beda.
+User=ubuntu
+WorkingDirectory=/home/ubuntu/wa-mirror
+# Pastikan path node benar: jalankan `which node` di VPS, sesuaikan bila bukan /usr/bin/node
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+# Batasi memori (VPS 32GB, ini cukup longgar untuk Baileys + SQLite)
+MemoryMax=2G
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

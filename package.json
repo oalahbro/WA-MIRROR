@@ -1,0 +1,17 @@
+{
+  "name": "wa-mirror",
+  "version": "1.0.0",
+  "description": "Always-on WhatsApp mirror (Baileys) on VPS with a simple WA-Web-like UI for fast local access",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "baileys": "^7.0.0-rc.9",
+    "better-sqlite3": "^11.8.0",
+    "express": "^4.21.2",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

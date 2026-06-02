@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WA Mirror</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Layar login -->
+  <div id="login" class="login">
+    <div class="login-box">
+      <h1>WA Mirror</h1>
+      <p>Masukkan token akses</p>
+      <input id="tokenInput" type="password" placeholder="AUTH_TOKEN" autocomplete="off" />
+      <button id="loginBtn"><span class="btn-label">Masuk</span><span class="btn-spin hidden"></span></button>
+      <div id="loginErr" class="login-err"></div>
+    </div>
+  </div>
+
+  <!-- Overlay QR (kalau WA belum terhubung) -->
+  <div id="qrOverlay" class="qr-overlay hidden">
+    <div class="qr-box">
+      <h2>Hubungkan WhatsApp</h2>
+      <p>Buka WhatsApp di HP → Perangkat tertaut → Tautkan perangkat → scan:</p>
+      <div class="qr-frame">
+        <img id="qrImg" class="hidden" alt="QR" />
+        <div id="qrWait" class="qr-wait"><span class="spinner"></span><span>Menunggu QR…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App utama -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <header class="sidebar-head">
+        <div class="head-row">
+          <div class="me" id="meLabel">WA Mirror</div>
+          <div id="statusPill" class="status-pill connecting">
+            <span class="dot"></span><span id="statusText">Menghubungkan…</span>
+          </div>
+          <button id="themeBtn" class="icon-btn" title="Tema warna">🎨</button>
+        </div>
+        <div id="themePopover" class="theme-popover hidden">
+          <div class="theme-title">Tema warna</div>
+          <div class="theme-swatches">
+            <button class="swatch" data-theme="green"  style="background:#00a884" title="Hijau"></button>
+            <button class="swatch" data-theme="blue"   style="background:#2f80ed" title="Biru"></button>
+            <button class="swatch" data-theme="purple" style="background:#7b5cff" title="Ungu"></button>
+            <button class="swatch" data-theme="orange" style="background:#f0900c" title="Jingga"></button>
+            <button class="swatch" data-theme="rose"   style="background:#e0526a" title="Rose"></button>
+            <button class="swatch" data-theme="teal"   style="background:#0d9488" title="Teal"></button>
+          </div>
+        </div>
+        <div id="statsLine" class="stats-line hidden">
+          <span id="statChats">0</span> chat · <span id="statMsgs">0</span> pesan
+        </div>
+        <input id="search" class="search" placeholder="Cari chat…" />
+      </header>
+
+      <!-- Banner sinkronisasi -->
+      <div id="syncBanner" class="sync-banner hidden">
+        <span class="spinner sm"></span>
+        <span id="syncText">Menyinkronkan riwayat…</span>
+      </div>
+
+      <div id="chatList" class="chat-list"></div>
+    </aside>
+
+    <main class="conversation">
+      <div id="convEmpty" class="conv-empty">
+        <div class="empty-art">💬</div>
+        <div>Pilih chat untuk mulai</div>
+      </div>
+      <div id="convView" class="conv-view hidden">
+        <header class="conv-head">
+          <button id="backBtn" class="back-btn" title="Kembali">←</button>
+          <div id="convTitle" class="conv-title"></div>
+        </header>
+        <div class="messages-wrap">
+          <div id="messages" class="messages"></div>
+          <div id="convLoading" class="conv-loading hidden"><span class="spinner"></span></div>
+          <button id="jumpBtn" class="jump-btn hidden" title="Ke pesan terbaru">↓<span id="jumpDot" class="jump-dot hidden"></span></button>
+        </div>
+        <div class="compose">
+          <div id="replyBar" class="reply-bar hidden">
+            <div class="reply-bar-info">
+              <span id="replySender" class="reply-bar-sender"></span>
+              <span id="replyText" class="reply-bar-text"></span>
+            </div>
+            <button type="button" id="replyCancel" class="reply-cancel" title="Batalkan">✕</button>
+          </div>
+          <div id="attachPreview" class="attach-preview hidden">
+            <div id="attachThumb" class="attach-thumb"></div>
+            <div class="attach-info">
+              <span id="attachName" class="attach-name"></span>
+              <span id="attachMeta" class="attach-meta"></span>
+            </div>
+            <button type="button" id="attachCancel" class="attach-cancel" title="Batalkan">✕</button>
+          </div>
+          <form id="sendForm" class="send-bar">
+            <button type="button" id="attachBtn" class="attach-btn" title="Lampirkan foto / video / dokumen">📎</button>
+            <input id="fileInput" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2" class="hidden" />
+            <textarea id="sendInput" class="send-input" placeholder="Ketik pesan…" autocomplete="off" rows="1"></textarea>
+            <button id="sendBtn" type="submit" class="send-btn">
+              <span class="btn-label">Kirim</span><span class="btn-spin hidden"></span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Lightbox media (foto/video resolusi penuh) -->
+  <div id="lightbox" class="lightbox hidden">
+    <button id="lightboxClose" class="lb-close" title="Tutup">✕</button>
+    <div id="lightboxContent" class="lb-content"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toasts" class="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
