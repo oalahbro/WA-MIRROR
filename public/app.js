@@ -305,6 +305,10 @@ async function openChat(jid, title) {
   api("/api/read", { method: "POST", body: JSON.stringify({ jid }) }).catch(() => {});
   renderChats();
 
+  // auto-fokus kolom ketik (desktop) supaya bisa langsung mengetik tanpa klik dulu;
+  // di mobile (≤768px) dilewati agar keyboard tidak nongol tiba-tiba saat buka chat.
+  if (window.innerWidth > 768) $("sendInput").focus();
+
   clearInterval(msgPollTimer);
   try {
     const msgs = await api(`/api/messages?jid=${encodeURIComponent(jid)}&limit=50`);
