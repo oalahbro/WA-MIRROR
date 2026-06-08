@@ -313,7 +313,7 @@ body {
 /* gambar masuk: state loading / gagal muat */
 .bubble .media-img { position: relative; display: inline-block; line-height: 0; overflow: hidden; border-radius: 6px; }
 .bubble .media-img img.show { display: block; }
-/* loader menutupi thumbnail (punya ukuran → loading=lazy menunda fetch sampai tampil di layar), tak terlihat */
+/* loader full-res tak terlihat (di belakang thumbnail), hanya untuk memicu fetch + onload swap */
 .bubble .media-img img.media-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
 .bubble .media-img.loading img.show { filter: blur(3px); transform: scale(1.02); } /* samarkan thumbnail kasar saat memuat */
 .bubble .media-img.failed img.show { filter: brightness(.8); }

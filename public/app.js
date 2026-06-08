@@ -428,7 +428,7 @@ const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "�
 function imgHTML(full, thumb) {
   return `<div class="media-img loading" data-full="${escapeHtml(full)}">
     <img class="media show" alt="" src="${thumb}">
-    <img class="media-loader" loading="lazy" alt="" src="${escapeHtml(full)}" onload="imgLoaded(this)" onerror="imgFailed(this)">
+    <img class="media-loader" alt="" src="${escapeHtml(full)}" onload="imgLoaded(this)" onerror="imgFailed(this)">
     <span class="media-spin spinner sm"></span>
     <button type="button" class="media-retry">⟳ Muat ulang</button>
   </div>`;
