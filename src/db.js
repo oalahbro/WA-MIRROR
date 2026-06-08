@@ -161,6 +161,23 @@ const _getMessageRaw = db.prepare(
 const _getChatName = db.prepare(`SELECT name FROM chats WHERE jid = @jid`);
 const _getContactName = db.prepare(`SELECT name FROM contacts WHERE jid = @jid`);
 
+// Cari ISI pesan (teks) lintas semua chat. LIKE %q% (tanpa indeks → full scan, tapi
+// cukup cepat utk skala personal). Sertakan nama chat + nama pengirim utk ditampilkan.
+const _searchMessages = db.prepare(`
+  SELECT m.chat_jid AS jid,
+         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), m.chat_jid) AS chat_name,
+         c.is_group AS is_group,
+         m.id, m.from_me, m.text, m.timestamp,
+         COALESCE(NULLIF(sc.name, ''), '') AS sender_name
+  FROM messages m
+  LEFT JOIN chats c     ON c.jid  = m.chat_jid
+  LEFT JOIN contacts ct ON ct.jid = m.chat_jid
+  LEFT JOIN contacts sc ON sc.jid = m.sender
+  WHERE m.text LIKE @q ESCAPE '\\'
+  ORDER BY m.timestamp DESC
+  LIMIT @limit
+`);
+
 // ---------- transactions / helpers ----------
 const recordMessage = db.transaction((msg) => {
   _insertMsg.run({
@@ -247,6 +264,14 @@ function getContactName(jid) {
   return r && r.name ? r.name : "";
 }
 
+// Cari isi pesan. Minimal 2 karakter. Escape wildcard LIKE (% _ \) agar literal.
+function searchMessages(q, limit = 50) {
+  const term = String(q || "").trim();
+  if (term.length < 2) return [];
+  const esc = term.replace(/[\\%_]/g, (c) => "\\" + c);
+  return _searchMessages.all({ q: "%" + esc + "%", limit: Math.min(Math.max(limit, 1), 100) });
+}
+
 function stats() {
   const c = db.prepare("SELECT COUNT(*) n FROM chats").get().n;
   const m = db.prepare("SELECT COUNT(*) n FROM messages").get().n;
@@ -267,5 +292,6 @@ module.exports = {
   getMessageRaw,
   getChatName,
   getContactName,
+  searchMessages,
   stats,
 };

@@ -567,6 +567,17 @@ async function downloadMedia(jid, id) {
   return { buffer, mimetype, fileName };
 }
 
+// URL foto profil sebuah jid (kontak/grup). "preview" = thumbnail kecil (ringan, cukup
+// untuk avatar di list); null bila tak ada foto / privasi / belum siap. Tak melempar.
+async function getAvatarUrl(jid, kind) {
+  if (!sock || !status.connected || !jid) return null;
+  try {
+    return await sock.profilePictureUrl(jid, kind === "full" ? "image" : "preview");
+  } catch (e) {
+    return null;
+  }
+}
+
 function getStatus() {
   const syncing = Date.now() - status.lastHistoryAt < SYNC_WINDOW_MS;
   return {
@@ -580,7 +591,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, downloadMedia, getStatus };
+module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

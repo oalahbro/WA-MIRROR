@@ -14,6 +14,8 @@ let loadingOlder = false;
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
 let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
 let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
+let msgSearchMode = false;   // true saat menampilkan hasil cari ISI pesan
+let msgSearchQuery = "";
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -199,6 +201,7 @@ function matchesFilter(c) {
 }
 
 function renderChats() {
+  if (msgSearchMode) return;   // tampilan diambil alih hasil "cari isi pesan"
   const q = $("search").value.trim().toLowerCase();
   const list = $("chatList");
   updateFilterCounts();
@@ -239,11 +242,32 @@ function reconcileChats(list, items) {
   existing.forEach((el, jid) => { if (!seen.has(jid)) el.remove(); });
 }
 
+// Inisial untuk fallback avatar (2 huruf dari nama). "?" bila nama = jid/kosong.
+function avatarInitials(name, isGroup) {
+  const n = String(name || "").trim();
+  if (!n || n.includes("@")) return isGroup ? "#" : "?";
+  const parts = n.split(/\s+/).filter(Boolean);
+  let s = parts[0] ? parts[0][0] : "";
+  if (parts.length > 1) s += parts[1][0];
+  return (s.toUpperCase().slice(0, 2)) || "?";
+}
+// Warna avatar stabil per-jid (hash → hue) untuk fallback inisial.
+function avatarColor(jid) {
+  const s = String(jid || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return `hsl(${h} 42% 52%)`;
+}
+function avatarUrl(jid) {
+  return `/api/avatar?jid=${encodeURIComponent(jid)}&token=${encodeURIComponent(TOKEN)}`;
+}
+
 function buildChatItem(c) {
   const el = document.createElement("div");
   el.className = "chat-item";
   el.dataset.jid = c.jid;
-  el.innerHTML = `<div class="row"><span class="name"></span><span class="time"></span></div><div class="row2"><span class="preview"></span><span class="mention hidden" title="Kamu di-tag / dibalas">@</span><span class="badge hidden"></span></div><button class="pin-btn" title="">📌</button>`;
+  el.innerHTML = `<span class="avatar"><span class="avatar-initials" style="background:${avatarColor(c.jid)}"></span><img class="avatar-img" alt=""></span><div class="chat-main"><div class="row"><span class="name"></span><span class="time"></span></div><div class="row2"><span class="preview"></span><span class="mention hidden" title="Kamu di-tag / dibalas">@</span><span class="badge hidden"></span></div></div><button class="pin-btn" title="">📌</button>`;
+  el.querySelector(".avatar-img").src = avatarUrl(c.jid);   // dimuat sekali; load/error via capture
   el.addEventListener("click", () => openChat(el.dataset.jid, el.querySelector(".name").textContent));
   el.querySelector(".pin-btn").addEventListener("click", (e) => { e.stopPropagation(); togglePin(el.dataset.jid); });
   updateChatItem(el, c);
@@ -257,6 +281,8 @@ function updateChatItem(el, c) {
   const name = (c.name || "") + (c.is_group ? " 👥" : "");
   const nameEl = el.querySelector(".name");
   if (nameEl.textContent !== name) nameEl.textContent = name;
+  const iniEl = el.querySelector(".avatar-initials");
+  if (iniEl) { const ini = avatarInitials(c.name, c.is_group); if (iniEl.textContent !== ini) iniEl.textContent = ini; }
   const time = (c.pinned ? "📌 " : "") + fmtTime(c.last_message_time);
   const timeEl = el.querySelector(".time");
   if (timeEl.textContent !== time) timeEl.textContent = time;
@@ -299,7 +325,83 @@ async function togglePin(jid) {
     toast("Gagal mengubah pin: " + e.message, "err");
   }
 }
-$("search").addEventListener("input", renderChats);
+$("search").addEventListener("input", () => {
+  if (msgSearchMode) msgSearchMode = false;   // mulai mengetik → kembali ke filter chat biasa
+  renderChats();
+});
+// Enter di kotak cari → cari ISI pesan (lintas chat), bukan cuma nama.
+$("search").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const q = $("search").value.trim();
+  if (q.length >= 2) runMsgSearch(q);
+});
+
+// ---------- cari isi pesan ----------
+function renderSearchShell(bodyHTML, count) {
+  $("chatList").innerHTML =
+    `<div class="search-head"><span class="search-head-q">🔎 <b>${escapeHtml(msgSearchQuery)}</b>${count != null ? ` · ${count}` : ""}</span>` +
+    `<button class="search-exit" title="Tutup pencarian">✕</button></div>` + bodyHTML;
+}
+async function runMsgSearch(q) {
+  msgSearchMode = true; msgSearchQuery = q;
+  renderSearchShell(`<div class="list-msg">Mencari…</div>`);
+  let results;
+  try { results = await api(`/api/search?q=${encodeURIComponent(q)}&limit=80`); }
+  catch (e) { if (msgSearchMode && msgSearchQuery === q) renderSearchShell(`<div class="list-msg">Gagal mencari.</div>`); return; }
+  if (!msgSearchMode || msgSearchQuery !== q) return; // user keburu ubah/keluar
+  if (!results.length) { renderSearchShell(`<div class="list-msg">Tidak ada pesan cocok.</div>`, 0); return; }
+  const items = results.map((r) => {
+    const who = r.from_me ? "Kamu: " : (r.is_group && r.sender_name ? escapeHtml(r.sender_name) + ": " : "");
+    return `<div class="search-result" data-jid="${escapeHtml(r.jid)}" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.chat_name)}">
+      <div class="sr-row"><span class="sr-name">${escapeHtml(r.chat_name)}${r.is_group ? " 👥" : ""}</span><span class="sr-time">${fmtTime(r.timestamp)}</span></div>
+      <div class="sr-snippet">${who}${highlightSnippet(r.text, q)}</div></div>`;
+  }).join("");
+  renderSearchShell(items, results.length);
+}
+// Potong teks di sekitar kemunculan + tandai kata yang cocok.
+function highlightSnippet(text, q) {
+  text = String(text || "");
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  let start = idx > 40 ? idx - 30 : 0;
+  let snip = text.slice(start, start + 140);
+  if (start > 0) snip = "…" + snip;
+  if (start + 140 < text.length) snip += "…";
+  let esc = escapeHtml(snip);
+  const qe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try { esc = esc.replace(new RegExp("(" + qe + ")", "ig"), "<mark>$1</mark>"); } catch (e) {}
+  return esc;
+}
+function exitMsgSearch() {
+  msgSearchMode = false; msgSearchQuery = "";
+  $("search").value = "";
+  renderChats();
+}
+// Klik hasil / tombol tutup (delegasi pada chatList; chat-item biasa pakai listener sendiri).
+$("chatList").addEventListener("click", (e) => {
+  if (e.target.closest(".search-exit")) { exitMsgSearch(); return; }
+  const r = e.target.closest(".search-result[data-jid]");
+  if (r) openChatToMessage(r.dataset.jid, r.dataset.name, r.dataset.id);
+});
+// Buka chat lalu loncat ke pesan hasil pencarian (muat lebih lama bila perlu).
+async function openChatToMessage(jid, name, id) {
+  msgSearchMode = false; msgSearchQuery = ""; $("search").value = "";
+  await openChat(jid, name);
+  for (let i = 0; i < 8; i++) {
+    if (locateBubble(id)) return;
+    const lo = $("messages").querySelector(".load-older");
+    if (!lo || lo.classList.contains("done")) break;
+    await loadOlder();
+  }
+  if (!locateBubble(id)) toast("Pesan cukup lama — gulir ke atas untuk memuat lagi");
+}
+function locateBubble(id) {
+  let el = null;
+  try { el = $("messages").querySelector(`.bubble[data-id="${CSS.escape(id)}"]`); } catch (e) {}
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  return true;
+}
 
 // Tab filter: Semua / Pribadi / Grup (preferensi disimpan di localStorage).
 $("chatFilters").addEventListener("click", (e) => {
@@ -330,6 +432,21 @@ function setFilterCount(filter, n) {
   else el.classList.add("hidden");
 }
 
+// Avatar: img sukses → tampilkan (.ok); gagal/404 → sembunyikan, inisial tetap terlihat.
+// Pakai fase CAPTURE (event load/error tak bubble). Inline handler dihindari (CSP).
+function wireAvatarLoaders(container) {
+  container.addEventListener("load", (e) => {
+    const t = e.target;
+    if (t.classList && t.classList.contains("avatar-img")) t.classList.add("ok");
+  }, true);
+  container.addEventListener("error", (e) => {
+    const t = e.target;
+    if (t.classList && t.classList.contains("avatar-img")) { t.classList.remove("ok"); t.style.display = "none"; }
+  }, true);
+}
+wireAvatarLoaders($("chatList"));
+wireAvatarLoaders($("convAvatar"));
+
 // ---------- conversation ----------
 async function openChat(jid, title) {
   activeJid = jid;
@@ -338,6 +455,14 @@ async function openChat(jid, title) {
   $("convEmpty").classList.add("hidden");
   $("convView").classList.remove("hidden");
   $("convTitle").textContent = title;
+  // avatar header
+  const isGrp = jid.endsWith("@g.us");
+  const cIni = $("convAvatar").querySelector(".avatar-initials");
+  cIni.textContent = avatarInitials(title, isGrp);
+  cIni.style.background = avatarColor(jid);
+  const cImg = $("convAvatar").querySelector(".avatar-img");
+  cImg.classList.remove("ok"); cImg.style.display = "";
+  cImg.src = avatarUrl(jid);
   $("messages").innerHTML = "";
   $("jumpBtn").classList.add("hidden");
   $("convLoading").classList.remove("hidden");

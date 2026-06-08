@@ -20,6 +20,27 @@ fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const safeName = (id) => String(id).replace(/[^A-Za-z0-9_-]/g, "_");
 const AUTH_TOKEN = process.env.AUTH_TOKEN || "";
 
+// Folder cache foto profil (avatar). TTL disk 30 hari; negative-cache (jid tanpa foto)
+// 6 jam agar tidak terus memanggil WA. Fetch ke WA dibatasi konkurensinya (anti ban).
+const AVATAR_DIR = path.resolve(__dirname, "../data/avatars");
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
+const AVATAR_TTL = 30 * 24 * 3600 * 1000;
+const AVATAR_NEG_TTL = 6 * 3600 * 1000;
+const noAvatar = new Map();           // jid -> epoch ms kedaluwarsa entry negatif
+let avActive = 0;
+const avQueue = [];
+const AV_MAX = 3;                     // maksimal fetch avatar paralel ke WA
+function avPump() {
+  if (avActive >= AV_MAX || !avQueue.length) return;
+  const { task, resolve } = avQueue.shift();
+  avActive++;
+  Promise.resolve().then(task).then(
+    (v) => { avActive--; resolve(v); avPump(); },
+    () => { avActive--; resolve(null); avPump(); }
+  );
+}
+function avRun(task) { return new Promise((resolve) => { avQueue.push({ task, resolve }); avPump(); }); }
+
 // Tebak mimetype dokumen/arsip dari ekstensi bila browser tak menyertakannya.
 const EXT_MIME = {
   pdf: "application/pdf", doc: "application/msword",
@@ -125,6 +146,13 @@ app.get("/api/messages", requireAuth, (req, res) => {
   res.json(store.getMessages(jid, before, limit));
 });
 
+// Cari ISI pesan lintas chat. ?q=<kata> (min 2 huruf), ?limit=.
+app.get("/api/search", requireAuth, (req, res) => {
+  const q = req.query.q || "";
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+  res.json(store.searchMessages(q, limit));
+});
+
 // Tandai chat sudah dibaca (hapus unread). Body: { jid }
 app.post("/api/read", requireAuth, (req, res) => {
   const { jid } = req.body || {};
@@ -166,6 +194,46 @@ app.get("/api/media", requireAuth, async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: "gagal mengambil media: " + e.message });
   }
+});
+
+// Foto profil (avatar) kontak/grup. Token boleh via query (dipakai di <img src>).
+// Urutan: cache disk segar → negative-cache → fetch ke WA (terbatas konkurensi) → cache.
+// 404 = tak ada foto/privasi (frontend jatuh ke inisial).
+app.get("/api/avatar", requireAuth, async (req, res) => {
+  const jid = req.query.jid;
+  if (!jid) return res.status(400).json({ error: "jid wajib" });
+  const file = path.join(AVATAR_DIR, safeName(jid) + ".jpg");
+
+  // 1) cache disk masih segar
+  try {
+    const st = fs.statSync(file);
+    if (Date.now() - st.mtimeMs < AVATAR_TTL) {
+      res.type("image/jpeg");
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      return fs.createReadStream(file).pipe(res);
+    }
+  } catch (e) { /* belum ada cache */ }
+
+  // 2) negative-cache: diketahui tak ada foto → 404 cepat tanpa panggil WA
+  const neg = noAvatar.get(jid);
+  if (neg && neg > Date.now()) return res.status(404).end();
+
+  // 3) ambil dari WA (dibatasi AV_MAX paralel)
+  const buf = await avRun(async () => {
+    const url = await wa.getAvatarUrl(jid);
+    if (!url) return null;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    return Buffer.from(await r.arrayBuffer());
+  });
+  if (!buf || !buf.length) {
+    noAvatar.set(jid, Date.now() + AVATAR_NEG_TTL);
+    return res.status(404).end();
+  }
+  fs.writeFile(file, buf, () => {});
+  res.type("image/jpeg");
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.send(buf);
 });
 
 app.post("/api/send", requireAuth, async (req, res) => {
