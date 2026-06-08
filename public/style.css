@@ -309,6 +309,26 @@ body {
 /* thumbnail gambar dari chat orang lain dibuat 20% lebih besar */
 .bubble.other:has(img.media) { max-width: min(78%, 36rem); }
 .bubble.other img.media, .bubble.other .media-video img.media { max-height: 360px; }
+
+/* gambar masuk: state loading / gagal muat */
+.bubble .media-img { position: relative; display: inline-block; line-height: 0; overflow: hidden; border-radius: 6px; }
+.bubble .media-img img.show { display: block; }
+/* loader menutupi thumbnail (punya ukuran → loading=lazy menunda fetch sampai tampil di layar), tak terlihat */
+.bubble .media-img img.media-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.bubble .media-img.loading img.show { filter: blur(3px); transform: scale(1.02); } /* samarkan thumbnail kasar saat memuat */
+.bubble .media-img.failed img.show { filter: brightness(.8); }
+.bubble .media-img .media-spin, .bubble .media-img .media-retry { display: none; }
+.bubble .media-img.loading .media-spin {
+  display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,.55)); /* kontras di atas gambar terang */
+}
+.bubble .media-img.failed .media-retry {
+  display: inline-flex; align-items: center; gap: 5px;
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  padding: 7px 13px; border: none; border-radius: 18px; cursor: pointer; white-space: nowrap;
+  background: rgba(0,0,0,.72); color: #fff; font-size: 12.5px; font-weight: 600; line-height: 1;
+}
+.bubble .media-img.failed .media-retry:hover { background: rgba(0,0,0,.88); }
 .bubble .media-video .play {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   width: 52px; height: 52px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;

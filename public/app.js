@@ -421,6 +421,42 @@ function rebuildDaySeparators() {
 }
 const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "📄 Dokumen" };
 
+// Gambar masuk: thumbnail (img.show) tampil SEKETIKA → box langsung berukuran benar,
+// tak pernah blank putih. img.media-loader (tersembunyi) memuat resolusi penuh; saat siap
+// di-swap ke img.show (crisp, sudah ter-cache). Spinner saat memuat; tombol "muat ulang" bila gagal.
+// `full` = URL /api/media, `thumb` = data URL base64 jpegThumbnail.
+function imgHTML(full, thumb) {
+  return `<div class="media-img loading" data-full="${escapeHtml(full)}">
+    <img class="media show" alt="" src="${thumb}">
+    <img class="media-loader" loading="lazy" alt="" src="${escapeHtml(full)}" onload="imgLoaded(this)" onerror="imgFailed(this)">
+    <span class="media-spin spinner sm"></span>
+    <button type="button" class="media-retry">⟳ Muat ulang</button>
+  </div>`;
+}
+// onload loader: full-res sudah ter-cache → tukar src thumbnail jadi full (crisp), buang loading.
+function imgLoaded(loader) {
+  const w = loader.closest(".media-img");
+  if (!w) return;
+  const show = w.querySelector("img.show");
+  if (show && show.src !== loader.src) show.src = loader.src;
+  w.classList.remove("loading", "failed");
+  w.classList.add("loaded");
+}
+// onerror loader: tandai gagal → spinner hilang, tombol muat ulang muncul (thumbnail tetap tampil).
+function imgFailed(loader) {
+  const w = loader.closest(".media-img");
+  if (w) { w.classList.remove("loading", "loaded"); w.classList.add("failed"); }
+}
+// Coba muat ulang full-res (cache-bust agar tak mengambil hasil gagal dari cache browser).
+function retryImg(w) {
+  const loader = w && w.querySelector("img.media-loader");
+  if (!loader || !w.dataset.full) return;
+  w.classList.remove("failed");
+  w.classList.add("loading");          // spinner tampil lagi
+  const full = w.dataset.full;
+  loader.src = full + (full.includes("?") ? "&" : "?") + "_r=" + Date.now();
+}
+
 // Chip dokumen yang bisa diklik untuk mengunduh (dipakai render & bubble optimistik).
 // `full` = URL /api/media (atau blob: lokal saat optimistik).
 function docChipHTML({ name, size, full }) {
@@ -474,8 +510,7 @@ function renderBubble(m) {
     const src = `data:image/jpeg;base64,${m.thumb}`;
     const full = `/api/media?jid=${encodeURIComponent(activeJid)}&id=${encodeURIComponent(m.id)}&token=${encodeURIComponent(TOKEN)}`;
     if (m.type === "image") {
-      // Tampilkan resolusi penuh inline (di-cache ke disk); thumb kecil jadi fallback bila media kedaluwarsa.
-      mediaHTML = `<img class="media" loading="lazy" src="${escapeHtml(full)}" data-full="${escapeHtml(full)}" data-kind="image" alt="" onerror="this.onerror=null;this.src='${src}'">`;
+      mediaHTML = imgHTML(full, src);
     } else {
       mediaHTML = `<div class="media-video" data-full="${escapeHtml(full)}" data-kind="video"><img class="media" loading="lazy" src="${src}" alt=""><span class="play">▶</span></div>`;
     }
@@ -513,9 +548,13 @@ $("messages").addEventListener("click", (e) => {
   if (q) { scrollToMessage(q.dataset.qid); return; }
   const dc = e.target.closest(".doc-chip[data-full]");
   if (dc) { downloadDoc(dc.dataset.full, dc.dataset.name); return; }
+  const rt = e.target.closest(".media-retry");
+  if (rt) { e.stopPropagation(); retryImg(rt.closest(".media-img")); return; }
   const vid = e.target.closest(".media-video[data-full]");
   if (vid) { openLightbox(vid.dataset.full, "video"); return; }
-  const img = e.target.closest("img.media[data-full]");
+  const imgWrap = e.target.closest(".media-img[data-full]");
+  if (imgWrap) { if (!imgWrap.classList.contains("failed")) openLightbox(imgWrap.dataset.full, "image"); return; }
+  const img = e.target.closest("img.media[data-full]");   // bubble optimistik (blob lokal)
   if (img) openLightbox(img.dataset.full, "image");
 });
 
