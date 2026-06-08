@@ -559,6 +559,12 @@ function linkify(escaped) {
   });
 }
 
+// Ganti token :bNNN: menjadi gambar emoji BBM (kosmetik mirror). Dijalankan pada teks
+// yang SUDAH di-escape (token hanya berisi ':','b',angka → aman, tak terpengaruh escaping).
+function bbmify(escaped) {
+  return escaped.replace(/:b(\d{3}):/g, '<img class="bbm-emo" src="/bbm/b$1.png" alt=":b$1:" loading="lazy">');
+}
+
 // Deteksi pesan yang isinya HANYA emoji (untuk ditampilkan besar ala WA).
 function isEmojiOnly(text) {
   const t = (text || "").trim();
@@ -664,7 +670,7 @@ function renderBubble(m) {
     }
     if (bodyText === PLACEHOLDER_TEXT[m.type]) bodyText = ""; // jangan tampilkan placeholder sbg caption
   }
-  const bodyHTML = bodyText ? `<div class="body">${linkify(escapeHtml(bodyText))}</div>` : "";
+  const bodyHTML = bodyText ? `<div class="body">${bbmify(linkify(escapeHtml(bodyText)))}</div>` : "";
   // pesan yang isinya hanya emoji → tampil besar tanpa bubble (ala WA)
   const emojiOnly = bodyText && !mediaHTML && !m.quoted_id && isEmojiOnly(bodyText);
 
@@ -1070,7 +1076,7 @@ async function sendTextMsg(text) {
   const box = $("messages");
   const tmpId = "tmp-" + Date.now();
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}<div class="body">${escapeHtml(text)}</div><div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
   try {
@@ -1105,7 +1111,7 @@ async function sendMediaMsg(caption) {
   } else {
     mediaHTML = docChipHTML({ name: file.name, size: file.size, full: url });
   }
-  const capHTML = caption ? `<div class="body">${escapeHtml(caption)}</div>` : "";
+  const capHTML = caption ? `<div class="body">${bbmify(linkify(escapeHtml(caption)))}</div>` : "";
   const rtext = caption || (kind === "image" ? "📷 Foto" : kind === "video" ? "🎥 Video" : "📄 " + file.name);
   box.insertAdjacentHTML("beforeend",
     `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(rtext)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}${mediaHTML}${capHTML}<div class="meta">mengirim…</div></div>`);
@@ -1223,7 +1229,11 @@ const EMOJI_TABS = [
   { key: "activity", icon: "⚽" },
   { key: "objects",  icon: "💡" },
   { key: "symbols",  icon: "🔣" },
+  { key: "bbm",      icon: "🅱️" },
 ];
+// Emoji BBM (kosmetik lokal): token :bNNN: ↔ gambar /bbm/bNNN.png (lihat scripts/fetch-bbm.js).
+const BBM_TOKENS = Array.from({ length: 200 }, (_, i) => ":b" + String(i + 1).padStart(3, "0") + ":");
+const bbmFile = (token) => { const m = /^:b(\d{3}):$/.exec(token); return m ? `/bbm/b${m[1]}.png` : ""; };
 let emojiCat = "smileys";
 let emojiBuilt = false;
 
@@ -1242,13 +1252,21 @@ function buildEmojiTabs() {
     (t) => `<button type="button" class="etab" data-cat="${t.key}" title="${t.key}">${t.icon}</button>`
   ).join("");
 }
+// Tombol emoji: gambar untuk token BBM (:bNNN:), teks untuk emoji unicode.
+function emojiButton(val) {
+  const f = bbmFile(val);
+  if (f) return `<button type="button" data-emo="${val}" title="${val}"><img class="bbm-pick" src="${f}" alt="" loading="lazy"></button>`;
+  return `<button type="button" data-emo="${val}">${val}</button>`;
+}
 function renderEmojiGrid() {
   const grid = $("emojiGrid");
-  let list = emojiCat === "recent" ? recentEmojis() : (EMOJI[emojiCat] || []);
+  let list = emojiCat === "recent" ? recentEmojis()
+    : emojiCat === "bbm" ? BBM_TOKENS
+    : (EMOJI[emojiCat] || []);
   if (emojiCat === "recent" && !list.length) {
     grid.innerHTML = `<div class="egroup-label">Belum ada emoji yang sering dipakai</div>`;
   } else {
-    grid.innerHTML = list.map((e) => `<button type="button" data-emo="${e}">${e}</button>`).join("");
+    grid.innerHTML = list.map(emojiButton).join("");
   }
   document.querySelectorAll("#emojiTabs .etab").forEach((t) => t.classList.toggle("active", t.dataset.cat === emojiCat));
 }
