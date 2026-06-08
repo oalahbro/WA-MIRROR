@@ -1039,21 +1039,55 @@ async function sendMediaMsg(caption) {
   }
 }
 
-// ---------- tema ----------
-// 3 tema lengkap (Terang/Gelap/Senja) — set atribut data-theme di <html>,
-// seluruh palet warna di-override via blok :root[data-theme=...] di CSS.
+// ---------- tema + warna aksen ----------
+// Tema (Terang/Gelap/Senja) = base palette via data-theme di <html>.
+// Warna aksen = override --green/--green-dark (+ tint bubble di tema terang).
+// Aksen dibuat theme-aware: di tema gelap varian aksen dibikin LEBIH TERANG
+// supaya tetap terbaca saat --green-dark dipakai sebagai warna teks.
 const THEMES = ["light", "dark", "senja"];
+const DARK_THEMES = new Set(["dark", "senja"]);
+const ACCENTS = {
+  green:  { base: "#00a884", light: "#008069", dark: "#21c7a8", bubble: "#d9fdd3" },
+  blue:   { base: "#2f80ed", light: "#1c63c9", dark: "#53bdeb", bubble: "#d7e9ff" },
+  purple: { base: "#7b5cff", light: "#5b3fd6", dark: "#b9a3ff", bubble: "#e9e1ff" },
+  orange: { base: "#f0900c", light: "#c9760a", dark: "#f6a93b", bubble: "#ffe7c7" },
+  rose:   { base: "#e0526a", light: "#c23a55", dark: "#ff8fa0", bubble: "#ffe1e7" },
+  teal:   { base: "#0d9488", light: "#0b7268", dark: "#2dd4bf", bubble: "#cdeee9" },
+};
+let curTheme = "light";
+let curAccent = localStorage.getItem("wa_accent") || ""; // "" = ikut bawaan tema
+
+function applyAccent() {
+  const root = document.documentElement;
+  const a = ACCENTS[curAccent];
+  if (!a) {
+    root.style.removeProperty("--green");
+    root.style.removeProperty("--green-dark");
+    root.style.removeProperty("--bubble-me");
+  } else {
+    root.style.setProperty("--green", a.base);
+    root.style.setProperty("--green-dark", DARK_THEMES.has(curTheme) ? a.dark : a.light);
+    if (DARK_THEMES.has(curTheme)) root.style.removeProperty("--bubble-me"); // tema gelap pakai bubble gelapnya
+    else root.style.setProperty("--bubble-me", a.bubble);
+  }
+  document.querySelectorAll(".accent-swatches .swatch").forEach((s) =>
+    s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
+}
 
 function applyTheme(name) {
-  const t = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
-  document.documentElement.setAttribute("data-theme", t);
-  localStorage.setItem("wa_theme", t);
-  document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === t));
+  curTheme = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
+  document.documentElement.setAttribute("data-theme", curTheme);
+  localStorage.setItem("wa_theme", curTheme);
+  document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === curTheme));
+  applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("themePopover").classList.toggle("hidden"); };
 document.querySelectorAll(".theme-opt").forEach((o) => {
-  o.onclick = () => { applyTheme(o.dataset.theme); $("themePopover").classList.add("hidden"); };
+  o.onclick = () => { applyTheme(o.dataset.theme); }; // popover tetap terbuka biar bisa atur aksen
+});
+document.querySelectorAll(".accent-swatches .swatch").forEach((s) => {
+  s.onclick = () => { curAccent = s.dataset.accent || ""; localStorage.setItem("wa_accent", curAccent); applyAccent(); };
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");

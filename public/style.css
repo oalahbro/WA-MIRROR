@@ -143,6 +143,18 @@ body {
 .theme-prev[data-t="light"]::after { background: #00a884; }
 .theme-prev[data-t="dark"]::after  { background: #00a884; }
 .theme-prev[data-t="senja"]::after { background: #f0900c; }
+.accent-title { margin-top: 14px; }
+.accent-swatches { display: flex; gap: 9px; flex-wrap: wrap; }
+.swatch {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
+  border: 1px solid rgba(0,0,0,.15); transition: transform .1s;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.active { outline: 2px solid var(--text); outline-offset: 2px; }
+.accent-default {
+  background: var(--green); color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
 .sidebar-head .me { font-weight: 600; color: var(--green-dark); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-head .me { font-weight: 600; color: var(--green-dark); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
