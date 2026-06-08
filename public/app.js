@@ -944,6 +944,98 @@ applyTheme(localStorage.getItem("wa_theme") || "green");
 // Pulihkan tab filter terakhir yang dipilih.
 document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
 
+// ---------- emoji picker ----------
+// Kumpulan emoji per kategori (tanpa dependency; hindari ZWJ/skin-tone agar aman lintas platform).
+const EMOJI = {
+  smileys: "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥳 😏 😒 😞 😔 😟 😕 🙁 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👻 💀 👽 🤖 💩".split(" "),
+  gestures: "👍 👎 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 ✍️ 💪 🦾 👏 🙌 👐 🤲 🫶 🤜 🤛 ✊ 👊 🫵 👀 👁️ 👅 👂 👃 🧠 🫀".split(" "),
+  hearts: "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ✨ ⭐ 🌟 💫 🔥 💥 💯 ✅ ❌ ⚠️ ❗ ❓ 💤 💬 👌".split(" "),
+  animals: "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦆 🦉 🐴 🦄 🐝 🐛 🦋 🐢 🐍 🐙 🦀 🐬 🐳 🐟 🌹 🌷 🌸 🌺 🌻 🌼 🌳 🌲 🌴 🌵 🍀 🍂 🌍 🌙 ☀️ ⛅ ☁️ 🌧️ ⛈️ ❄️ 🌈 💧".split(" "),
+  food: "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🍆 🥕 🌽 🌶️ 🥦 🍄 🥜 🍞 🧀 🍗 🍖 🌭 🍔 🍟 🍕 🌮 🌯 🥗 🍜 🍣 🍱 🍙 🍚 🍦 🍰 🎂 🍫 🍬 🍩 🍪 ☕ 🍵 🍺 🍻 🥂 🍷 🥤".split(" "),
+  activity: "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🏓 🏸 🥅 🏆 🥇 🥈 🥉 🎯 🎮 🎲 🎸 🎤 🎧 🎬 🎨 🚗 🚕 🚙 🚌 🏍️ 🚲 ✈️ 🚀 🚁 🛵 🏠 🏢 🏖️ ⛰️ 🎉 🎊 🎁 🎈".split(" "),
+  objects: "⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 📷 📸 🎥 📺 🔋 🔌 💡 🔦 📔 📚 💰 💵 💳 ✉️ 📧 📦 📅 📌 📎 ✂️ 🔒 🔑 🔨 🛠️ ⚙️ 🧲 💉 💊 🚽 🧹 🛒 ⏰ ⏳".split(" "),
+  symbols: "💯 🔔 🔕 ➕ ➖ ✖️ ➗ ♾️ ✔️ ☑️ 🔘 ⚫ ⚪ 🔴 🟠 🟡 🟢 🔵 🟣 🟤 🔺 🔻 ⬆️ ⬇️ ⬅️ ➡️ ↗️ ↘️ 🔁 🔄 🆗 🆕 🆒 🚫 ©️ ®️ ™️ #️⃣ 🇮🇩".split(" "),
+};
+const EMOJI_TABS = [
+  { key: "recent",   icon: "🕒" },
+  { key: "smileys",  icon: "😀" },
+  { key: "gestures", icon: "👍" },
+  { key: "hearts",   icon: "❤️" },
+  { key: "animals",  icon: "🐶" },
+  { key: "food",     icon: "🍔" },
+  { key: "activity", icon: "⚽" },
+  { key: "objects",  icon: "💡" },
+  { key: "symbols",  icon: "🔣" },
+];
+let emojiCat = "smileys";
+let emojiBuilt = false;
+
+function recentEmojis() {
+  try { return JSON.parse(localStorage.getItem("wa_emoji_recent") || "[]"); } catch (e) { return []; }
+}
+function pushRecentEmoji(emo) {
+  let list = recentEmojis().filter((x) => x !== emo);
+  list.unshift(emo);
+  list = list.slice(0, 24);
+  localStorage.setItem("wa_emoji_recent", JSON.stringify(list));
+}
+
+function buildEmojiTabs() {
+  $("emojiTabs").innerHTML = EMOJI_TABS.map(
+    (t) => `<button type="button" class="etab" data-cat="${t.key}" title="${t.key}">${t.icon}</button>`
+  ).join("");
+}
+function renderEmojiGrid() {
+  const grid = $("emojiGrid");
+  let list = emojiCat === "recent" ? recentEmojis() : (EMOJI[emojiCat] || []);
+  if (emojiCat === "recent" && !list.length) {
+    grid.innerHTML = `<div class="egroup-label">Belum ada emoji yang sering dipakai</div>`;
+  } else {
+    grid.innerHTML = list.map((e) => `<button type="button" data-emo="${e}">${e}</button>`).join("");
+  }
+  document.querySelectorAll("#emojiTabs .etab").forEach((t) => t.classList.toggle("active", t.dataset.cat === emojiCat));
+}
+
+// Sisipkan emoji pada posisi kursor di textarea (atau di akhir bila tak fokus).
+function insertEmoji(emo) {
+  const t = $("sendInput");
+  const s = typeof t.selectionStart === "number" ? t.selectionStart : t.value.length;
+  const e = typeof t.selectionEnd === "number" ? t.selectionEnd : t.value.length;
+  t.value = t.value.slice(0, s) + emo + t.value.slice(e);
+  const pos = s + emo.length;
+  t.focus();
+  t.setSelectionRange(pos, pos);
+  autoGrowInput();
+  pushRecentEmoji(emo);
+}
+
+function toggleEmojiPanel() {
+  const panel = $("emojiPanel");
+  const willOpen = panel.classList.contains("hidden");
+  if (willOpen) {
+    if (!emojiBuilt) { buildEmojiTabs(); emojiBuilt = true; }
+    if (recentEmojis().length) emojiCat = "recent";
+    else if (emojiCat === "recent") emojiCat = "smileys";
+    renderEmojiGrid();
+  }
+  panel.classList.toggle("hidden");
+}
+
+$("emojiBtn").onclick = (e) => { e.stopPropagation(); toggleEmojiPanel(); };
+$("emojiTabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".etab");
+  if (!tab) return;
+  emojiCat = tab.dataset.cat;
+  renderEmojiGrid();
+});
+$("emojiGrid").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-emo]");
+  if (b) insertEmoji(b.dataset.emo);   // panel tetap terbuka → bisa pilih beberapa
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#emojiPanel") && !e.target.closest("#emojiBtn")) $("emojiPanel").classList.add("hidden");
+});
+
 // ---------- boot ----------
 function startApp() {
   $("login").classList.add("hidden");
