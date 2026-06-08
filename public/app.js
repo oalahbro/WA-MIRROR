@@ -428,7 +428,7 @@ const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "�
 function imgHTML(full, thumb) {
   return `<div class="media-img loading" data-full="${escapeHtml(full)}">
     <img class="media show" alt="" src="${thumb}">
-    <img class="media-loader" alt="" src="${escapeHtml(full)}" onload="imgLoaded(this)" onerror="imgFailed(this)">
+    <img class="media-loader" alt="" src="${escapeHtml(full)}">
     <span class="media-spin spinner sm"></span>
     <button type="button" class="media-retry">⟳ Muat ulang</button>
   </div>`;
@@ -557,6 +557,16 @@ $("messages").addEventListener("click", (e) => {
   const img = e.target.closest("img.media[data-full]");   // bubble optimistik (blob lokal)
   if (img) openLightbox(img.dataset.full, "image");
 });
+
+// Load/error gambar full-res. Event load/error TIDAK bubble → pakai fase CAPTURE di
+// container (satu listener, menangani semua .media-loader). Inline onload/onerror tak
+// dipakai karena diblokir CSP (script-src 'self' tanpa unsafe-inline).
+$("messages").addEventListener("load", (e) => {
+  if (e.target.classList && e.target.classList.contains("media-loader")) imgLoaded(e.target);
+}, true);
+$("messages").addEventListener("error", (e) => {
+  if (e.target.classList && e.target.classList.contains("media-loader")) imgFailed(e.target);
+}, true);
 
 // ---------- reply (balas/kutip) ----------
 function startReply(id, sender, text) {
