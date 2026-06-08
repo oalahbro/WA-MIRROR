@@ -1039,33 +1039,26 @@ async function sendMediaMsg(caption) {
   }
 }
 
-// ---------- tema warna ----------
-// Tiap tema mengganti variabel aksen + tint bubble; layout tetap.
-const THEMES = {
-  green:  { "--green": "#00a884", "--green-dark": "#008069", "--bubble-me": "#d9fdd3" },
-  blue:   { "--green": "#2f80ed", "--green-dark": "#1c63c9", "--bubble-me": "#d7e9ff" },
-  purple: { "--green": "#7b5cff", "--green-dark": "#5b3fd6", "--bubble-me": "#e9e1ff" },
-  orange: { "--green": "#f0900c", "--green-dark": "#c9760a", "--bubble-me": "#ffe7c7" },
-  rose:   { "--green": "#e0526a", "--green-dark": "#c23a55", "--bubble-me": "#ffe1e7" },
-  teal:   { "--green": "#0d9488", "--green-dark": "#0b7268", "--bubble-me": "#cdeee9" },
-};
+// ---------- tema ----------
+// 3 tema lengkap (Terang/Gelap/Senja) — set atribut data-theme di <html>,
+// seluruh palet warna di-override via blok :root[data-theme=...] di CSS.
+const THEMES = ["light", "dark", "senja"];
 
 function applyTheme(name) {
-  const t = THEMES[name] || THEMES.green;
-  const root = document.documentElement;
-  Object.entries(t).forEach(([k, v]) => root.style.setProperty(k, v));
-  localStorage.setItem("wa_theme", THEMES[name] ? name : "green");
-  document.querySelectorAll(".swatch").forEach((s) => s.classList.toggle("active", s.dataset.theme === name));
+  const t = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
+  document.documentElement.setAttribute("data-theme", t);
+  localStorage.setItem("wa_theme", t);
+  document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === t));
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("themePopover").classList.toggle("hidden"); };
-document.querySelectorAll(".swatch").forEach((s) => {
-  s.onclick = () => { applyTheme(s.dataset.theme); $("themePopover").classList.add("hidden"); };
+document.querySelectorAll(".theme-opt").forEach((o) => {
+  o.onclick = () => { applyTheme(o.dataset.theme); $("themePopover").classList.add("hidden"); };
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");
 });
-applyTheme(localStorage.getItem("wa_theme") || "green");
+applyTheme(localStorage.getItem("wa_theme") || "light");
 // Pulihkan tab filter terakhir yang dipilih.
 document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
 
