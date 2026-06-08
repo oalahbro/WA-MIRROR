@@ -245,10 +245,10 @@ app.get("/api/avatar", requireAuth, async (req, res) => {
 });
 
 app.post("/api/send", requireAuth, async (req, res) => {
-  const { jid, text, quotedId } = req.body || {};
+  const { jid, text, quotedId, quotedJid } = req.body || {};
   if (!jid || !text) return res.status(400).json({ error: "jid & text wajib" });
   try {
-    const id = await wa.sendMessage(jid, text, quotedId);
+    const id = await wa.sendMessage(jid, text, quotedId, quotedJid);
     res.json({ ok: true, id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -266,6 +266,7 @@ app.post(
     const kind = req.query.kind; // "image" | "video" | "document"
     const caption = req.query.caption || "";
     const quotedId = req.query.quotedId || "";
+    const quotedJid = req.query.quotedJid || "";
     const fileName = req.query.fileName || "";
     let mimetype = req.get("content-type") || "";
     // Dokumen: pastikan mimetype masuk akal (browser sering kirim octet-stream/kosong).
@@ -277,7 +278,7 @@ app.post(
       return res.status(400).json({ error: "file kosong" });
     }
     try {
-      const id = await wa.sendMedia(jid, kind, req.body, mimetype, caption, quotedId, fileName);
+      const id = await wa.sendMedia(jid, kind, req.body, mimetype, caption, quotedId, fileName, quotedJid);
       res.json({ ok: true, id });
     } catch (e) {
       res.status(500).json({ error: e.message });

@@ -487,16 +487,21 @@ async function start() {
 
 // Bangun objek 'quoted' untuk Baileys: pakai pesan asli dari cache bila ada,
 // kalau tidak rekonstruksi stub minimal dari DB (kutipan tampil sebagai teks).
-function buildQuoted(jid, quotedId) {
+// srcJid = jid chat ASAL pesan yang dikutip. Beda dari `jid` (tujuan kirim) hanya pada
+// "balas pribadi": pesan asli ada di GRUP tapi dikirim ke chat PRIBADI. Memakai remoteJid
+// chat asal membuat Baileys menyusun quote lintas-chat (contextInfo.remoteJid) → WA asli
+// menampilkan kutipan (reply-privately). Bila pesan masih di cache, pakai aslinya (termasuk media).
+function buildQuoted(jid, quotedId, srcJid) {
   if (!quotedId) return undefined;
   const cached = msgCache.get(quotedId);
   if (cached) return cached;
-  const row = store.getMessageById(jid, quotedId);
+  const lookupJid = srcJid || jid;
+  const row = store.getMessageById(lookupJid, quotedId);
   if (!row) return undefined;
-  const isGroup = jid.endsWith("@g.us");
+  const isGroup = lookupJid.endsWith("@g.us");
   return {
     key: {
-      remoteJid: jid,
+      remoteJid: lookupJid,
       fromMe: !!row.from_me,
       id: quotedId,
       participant: isGroup ? row.sender || undefined : undefined,
@@ -505,10 +510,10 @@ function buildQuoted(jid, quotedId) {
   };
 }
 
-async function sendMessage(jid, text, quotedId) {
+async function sendMessage(jid, text, quotedId, quotedJid) {
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   const opts = {};
-  const quoted = buildQuoted(jid, quotedId);
+  const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
   const sent = await sock.sendMessage(jid, { text }, opts);
   return sent?.key?.id || null;
@@ -516,7 +521,7 @@ async function sendMessage(jid, text, quotedId) {
 
 // Kirim foto / video / dokumen. buffer = isi file (Buffer),
 // kind = "image" | "video" | "document". fileName dipakai untuk dokumen/arsip.
-async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileName) {
+async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileName, quotedJid) {
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   if (!buffer || !buffer.length) throw new Error("file kosong");
   let content;
@@ -535,7 +540,7 @@ async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileNam
   }
   if (caption) content.caption = caption;
   const opts = {};
-  const quoted = buildQuoted(jid, quotedId);
+  const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
   const sent = await sock.sendMessage(jid, content, opts);
   return sent?.key?.id || null;

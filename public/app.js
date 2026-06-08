@@ -759,6 +759,7 @@ async function copyText(t) {
 // server; bila tak ada mapping, fallback kirim langsung ke @lid. Kutipan native nyambung
 // bila pesan asli masih di cache server, kalau tidak tetap terkirim sebagai teks.
 async function replyPrivately(senderJid, name, msgId, text) {
+  const groupJid = activeJid;                  // jid grup ASAL (sebelum pindah chat) → utk quote lintas-chat
   const title = name || senderJid.split("@")[0];
   let target = senderJid;
   if (senderJid.endsWith("@lid")) {
@@ -771,7 +772,7 @@ async function replyPrivately(senderJid, name, msgId, text) {
   }
   toast("Balas pribadi ke " + title, "", 1500);
   await openChat(target, title);
-  startReply(msgId, name || title, text);
+  startReply(msgId, name || title, text, groupJid);  // bawa jid grup biar quote nyambung di WA asli
 }
 
 $("messages").addEventListener("contextmenu", (e) => {
@@ -796,8 +797,10 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMsgMe
 $("messages").addEventListener("scroll", closeMsgMenu);
 
 // ---------- reply (balas/kutip) ----------
-function startReply(id, sender, text) {
-  replyTo = { id, sender: sender || "", text: text || "" };
+// srcJid: jid chat ASAL pesan yg dikutip (dipakai saat "balas pribadi" — pesan asli di grup,
+// dikirim ke chat pribadi). Kosong = kutip pesan di chat yang sama.
+function startReply(id, sender, text, srcJid) {
+  replyTo = { id, sender: sender || "", text: text || "", srcJid: srcJid || "" };
   $("replySender").textContent = sender || "Pesan";
   $("replyText").textContent = text || "";
   $("replyBar").classList.remove("hidden");
@@ -1071,14 +1074,14 @@ async function sendTextMsg(text) {
   rebuildDaySeparators();
   scrollToBottom();
   try {
-    const res = await api("/api/send", { method: "POST", body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "" }) });
+    const res = await api("/api/send", { method: "POST", body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "" }) });
     finalizeBubble(tmpId, res.id);
     setTimeout(refreshNewest, 600);
   } catch (err) {
     removeBubble(tmpId);
     $("sendInput").value = text; // kembalikan teks supaya tidak hilang
     autoGrowInput();
-    if (quote) startReply(quote.id, quote.sender, quote.text); // kembalikan bar reply
+    if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid); // kembalikan bar reply
     toast("Gagal kirim: " + err.message, "err");
   } finally {
     setBtnLoading($("sendBtn"), false);
@@ -1118,7 +1121,7 @@ async function sendMediaMsg(caption) {
   autoGrowInput();
 
   try {
-    const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", fileName: kind === "document" ? file.name : "" });
+    const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", fileName: kind === "document" ? file.name : "" });
     const fallbackType = kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "application/octet-stream";
     const res = await fetch("/api/send-media?" + qs.toString(), {
       method: "POST",
@@ -1133,7 +1136,7 @@ async function sendMediaMsg(caption) {
   } catch (err) {
     removeBubble(tmpId);
     URL.revokeObjectURL(url);
-    if (quote) startReply(quote.id, quote.sender, quote.text);
+    if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid);
     toast("Gagal kirim media: " + err.message, "err");
   } finally {
     setBtnLoading($("sendBtn"), false);
