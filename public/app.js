@@ -13,6 +13,7 @@ let lastConnState = "";   // untuk toast transisi koneksi
 let loadingOlder = false;
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
 let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
+let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -189,14 +190,28 @@ async function loadChats() {
     renderChats();
   } catch (e) {}
 }
+// Apakah chat ini grup? Andalkan flag dari API, fallback ke suffix jid.
+function isGroupChat(c) { return c.is_group ? true : (c.jid || "").endsWith("@g.us"); }
+function matchesFilter(c) {
+  if (chatFilter === "group") return isGroupChat(c);
+  if (chatFilter === "private") return !isGroupChat(c);
+  return true;
+}
+
 function renderChats() {
   const q = $("search").value.trim().toLowerCase();
   const list = $("chatList");
-  const filtered = q ? allChats.filter((c) => (c.name || "").toLowerCase().includes(q)) : allChats;
+  updateFilterCounts();
+  let filtered = allChats.filter(matchesFilter);
+  if (q) filtered = filtered.filter((c) => (c.name || "").toLowerCase().includes(q));
 
   if (!filtered.length) {
     if (!chatsLoadedOnce) { showChatSkeleton(); return; }
-    list.innerHTML = `<div class="list-msg">${q ? "Tidak ada chat cocok." : "Belum ada chat. Data akan muncul saat tersinkron."}</div>`;
+    const msg = q ? "Tidak ada chat cocok."
+      : chatFilter === "group" ? "Belum ada grup."
+      : chatFilter === "private" ? "Belum ada chat pribadi."
+      : "Belum ada chat. Data akan muncul saat tersinkron.";
+    list.innerHTML = `<div class="list-msg">${msg}</div>`;
     return;
   }
 
@@ -285,6 +300,35 @@ async function togglePin(jid) {
   }
 }
 $("search").addEventListener("input", renderChats);
+
+// Tab filter: Semua / Pribadi / Grup (preferensi disimpan di localStorage).
+$("chatFilters").addEventListener("click", (e) => {
+  const tab = e.target.closest(".filter-tab");
+  if (!tab || tab.dataset.filter === chatFilter) return;
+  chatFilter = tab.dataset.filter;
+  localStorage.setItem("wa_filter", chatFilter);
+  document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
+  renderChats();
+});
+
+// Badge jumlah chat ber-pesan-baru (unread/mention) per kategori pada tiap tab.
+function updateFilterCounts() {
+  let priv = 0, grp = 0;
+  for (const c of allChats) {
+    if (c.jid === activeJid) continue;          // chat yang sedang dibuka tidak dihitung
+    if (!((c.unread || 0) > 0 || (c.mentions || 0) > 0)) continue;
+    if (isGroupChat(c)) grp++; else priv++;
+  }
+  setFilterCount("all", priv + grp);
+  setFilterCount("private", priv);
+  setFilterCount("group", grp);
+}
+function setFilterCount(filter, n) {
+  const el = document.querySelector(`.filter-tab[data-filter="${filter}"] .filter-count`);
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 99 ? "99+" : String(n); el.classList.remove("hidden"); }
+  else el.classList.add("hidden");
+}
 
 // ---------- conversation ----------
 async function openChat(jid, title) {
@@ -848,6 +892,8 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");
 });
 applyTheme(localStorage.getItem("wa_theme") || "green");
+// Pulihkan tab filter terakhir yang dipilih.
+document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
 
 // ---------- boot ----------
 function startApp() {

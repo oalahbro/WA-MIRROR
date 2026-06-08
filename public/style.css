@@ -136,6 +136,22 @@ body {
   font-size: 14px; outline: none;
 }
 
+/* filter tab grup/pribadi */
+.chat-filters { display: flex; gap: 6px; margin-top: 8px; }
+.filter-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 8px; border: none; border-radius: 16px; cursor: pointer;
+  background: #fff; color: var(--muted); font-size: 13px; font-weight: 600;
+  transition: background .12s, color .12s;
+}
+.filter-tab:hover { background: #eef0f1; }
+.filter-tab.active { background: var(--green); color: #fff; }
+.filter-count {
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; line-height: 16px;
+  font-size: 11px; font-weight: 700; background: rgba(0,0,0,.12); color: inherit;
+}
+.filter-tab.active .filter-count { background: rgba(255,255,255,.3); }
+
 /* sync banner */
 .sync-banner {
   display: flex; align-items: center; gap: 8px; padding: 8px 14px;
