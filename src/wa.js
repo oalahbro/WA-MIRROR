@@ -567,6 +567,20 @@ async function downloadMedia(jid, id) {
   return { buffer, mimetype, fileName };
 }
 
+// Petakan jid @lid (alamat tersembunyi anggota grup) → jid nomor asli (@s.whatsapp.net),
+// pakai mapping LID↔PN yang dipelihara Baileys. Return "" bila tak ada mapping.
+// jid @s.whatsapp.net dikembalikan apa adanya; selain itu "".
+async function resolveLidToPn(jid) {
+  if (!sock || !jid) return "";
+  if (jid.endsWith("@s.whatsapp.net")) return jid;
+  if (!jid.endsWith("@lid")) return "";
+  try {
+    const norm = jidNormalizedUser(jid); // buang suffix device → user@lid
+    const pn = await sock.signalRepository?.lidMapping?.getPNForLID(norm);
+    return pn ? jidNormalizedUser(pn) : ""; // getPNForLID balikin pakai suffix device → bersihkan jadi nomor@s.whatsapp.net
+  } catch (e) { return ""; }
+}
+
 // URL foto profil sebuah jid (kontak/grup). "preview" = thumbnail kecil (ringan, cukup
 // untuk avatar di list); null bila tak ada foto / privasi / belum siap. Tak melempar.
 async function getAvatarUrl(jid, kind) {
@@ -591,7 +605,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, getStatus };
+module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, resolveLidToPn, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

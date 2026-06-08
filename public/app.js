@@ -726,8 +726,9 @@ function openMsgMenu(b, x, y) {
   const items = [];
   if (text) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
   items.push({ label: "↩️ Balas", act: () => startReply(id, name, text) });
-  // Balas pribadi: hanya di GRUP, pada pesan orang lain, & pengirim punya nomor (bukan @lid).
-  if (inGroup && !fromMe && sender.endsWith("@s.whatsapp.net")) {
+  // Balas pribadi: di GRUP, pada pesan orang lain dengan pengirim ber-jid
+  // (@s.whatsapp.net atau @lid — yang @lid di-resolve ke nomor asli saat diklik).
+  if (inGroup && !fromMe && (sender.endsWith("@s.whatsapp.net") || sender.endsWith("@lid"))) {
     items.push({ label: "👤 Balas pribadi", act: () => replyPrivately(sender, name, id, text) });
   }
   const menu = $("msgMenu");
@@ -754,11 +755,22 @@ async function copyText(t) {
 }
 
 // Balas pribadi: buka chat pribadi pengirim lalu siapkan kutipan pesan grupnya.
-// Kutipan native nyambung bila pesan asli masih di cache server (forward); kalau tidak, tetap terkirim sbg teks.
+// Anggota grup yang ber-jid @lid (alamat tersembunyi) di-resolve dulu ke nomor asli via
+// server; bila tak ada mapping, fallback kirim langsung ke @lid. Kutipan native nyambung
+// bila pesan asli masih di cache server, kalau tidak tetap terkirim sebagai teks.
 async function replyPrivately(senderJid, name, msgId, text) {
   const title = name || senderJid.split("@")[0];
+  let target = senderJid;
+  if (senderJid.endsWith("@lid")) {
+    toast("Mencari nomor…", "", 1200);
+    try {
+      const r = await api(`/api/resolve-jid?jid=${encodeURIComponent(senderJid)}`);
+      if (r && r.jid) target = r.jid;          // ketemu nomor asli
+      else toast("Nomor tersembunyi — coba kirim via alamat grup", "", 2200);
+    } catch (e) { /* pakai jid asli sebagai fallback */ }
+  }
   toast("Balas pribadi ke " + title, "", 1500);
-  await openChat(senderJid, title);
+  await openChat(target, title);
   startReply(msgId, name || title, text);
 }
 

@@ -153,6 +153,14 @@ app.get("/api/search", requireAuth, (req, res) => {
   res.json(store.searchMessages(q, limit));
 });
 
+// Resolve jid @lid (anggota grup) → nomor asli @s.whatsapp.net. { jid: "" } bila tak ada mapping.
+app.get("/api/resolve-jid", requireAuth, async (req, res) => {
+  const jid = req.query.jid;
+  if (!jid) return res.status(400).json({ error: "jid wajib" });
+  try { res.json({ jid: (await wa.resolveLidToPn(jid)) || "" }); }
+  catch (e) { res.json({ jid: "" }); }
+});
+
 // Tandai chat sudah dibaca (hapus unread). Body: { jid }
 app.post("/api/read", requireAuth, (req, res) => {
   const { jid } = req.body || {};
