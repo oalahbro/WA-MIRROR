@@ -121,7 +121,7 @@
             <button type="button" id="emojiBtn" class="emoji-btn" title="Emoji">😀</button>
             <button type="button" id="attachBtn" class="attach-btn" title="Lampirkan foto / video / dokumen">📎</button>
             <input id="fileInput" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2" class="hidden" />
-            <textarea id="sendInput" class="send-input" placeholder="Ketik pesan…" autocomplete="off" rows="1"></textarea>
+            <div id="sendInput" class="send-input" contenteditable="true" role="textbox" aria-multiline="true" data-ph="Ketik pesan…"></div>
             <button id="sendBtn" type="submit" class="send-btn">
               <span class="btn-label">Kirim</span><span class="btn-spin hidden"></span>
             </button>

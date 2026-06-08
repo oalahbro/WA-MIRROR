@@ -673,6 +673,10 @@ function renderBubble(m) {
   const bodyHTML = bodyText ? `<div class="body">${bbmify(linkify(escapeHtml(bodyText)))}</div>` : "";
   // pesan yang isinya hanya emoji → tampil besar tanpa bubble (ala WA)
   const emojiOnly = bodyText && !mediaHTML && !m.quoted_id && isEmojiOnly(bodyText);
+  // pesan yang isinya hanya emoticon BBM (≤6) → gambar besar tanpa bubble
+  const bbmOnly = bodyText && !mediaHTML && !m.quoted_id
+    && /^(?:\s*:b\d{3}:\s*)+$/.test(bodyText)
+    && (bodyText.match(/:b\d{3}:/g) || []).length <= 6;
 
   // blok kutipan bila pesan ini membalas pesan lain
   let quotedHTML = "";
@@ -685,7 +689,7 @@ function renderBubble(m) {
   const replyPreview = bodyText || PLACEHOLDER_TEXT[m.type] || m.text || "";
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
-  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
     <button class="reply-btn" title="Balas">↩</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
     <div class="meta">${fmtTime(m.timestamp)}</div>
@@ -1019,7 +1023,7 @@ function showAttachPreview() {
     $("attachMeta").textContent = (p.kind === "image" ? "Foto" : "Video") + " · " + fmtSize(p.file.size);
   }
   $("attachPreview").classList.remove("hidden");
-  $("sendInput").placeholder = "Tambah keterangan…";
+  setComposePlaceholder("Tambah keterangan…");
   $("sendInput").focus();
 }
 function clearAttach() {
@@ -1027,7 +1031,7 @@ function clearAttach() {
   pendingFile = null;
   $("attachThumb").innerHTML = "";
   $("attachPreview").classList.add("hidden");
-  $("sendInput").placeholder = "Ketik pesan…";
+  setComposePlaceholder("Ketik pesan…");
 }
 
 // ---------- send ----------
@@ -1044,10 +1048,38 @@ function removeBubble(tmpId) {
   if (el) { el.remove(); rebuildDaySeparators(); }
 }
 
+// ---------- kolom ketik (contenteditable: bisa muat gambar emoticon BBM) ----------
+// Serialisasi isi editor → teks polos: <img> emoticon → kode :bNNN:, <br>/<div> → newline.
+function getComposeText() {
+  const root = $("sendInput");
+  let out = "";
+  (function walk(node) {
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) out += n.nodeValue;
+      else if (n.nodeType === 1) {
+        if (n.tagName === "IMG") out += n.dataset.code || n.getAttribute("alt") || "";
+        else if (n.tagName === "BR") out += "\n";
+        else {
+          if (n.tagName === "DIV" && out && !out.endsWith("\n")) out += "\n";
+          walk(n);
+        }
+      }
+    });
+  })(root);
+  return out;
+}
+function clearCompose() { $("sendInput").innerHTML = ""; }
+// Isi editor dari teks (kode :bNNN: → gambar) — dipakai saat mengembalikan teks gagal kirim.
+function setComposeText(text) {
+  $("sendInput").innerHTML = bbmify(linkify(escapeHtml(text))).replace(/\n/g, "<br>");
+}
+function setComposePlaceholder(txt) { $("sendInput").dataset.ph = txt; }
+function autoGrowInput() {}   // contenteditable tumbuh sendiri (CSS min/max-height)
+
 $("sendForm").addEventListener("submit", (e) => {
   e.preventDefault();
   if (!activeJid) return;
-  const text = $("sendInput").value.trim();
+  const text = getComposeText().trim();
   if (pendingFile) { sendMediaMsg(text); return; }
   if (text) sendTextMsg(text);
 });
@@ -1059,19 +1091,19 @@ $("sendInput").addEventListener("keydown", (e) => {
     $("sendForm").requestSubmit();
   }
 });
-// Auto-tinggi textarea mengikuti isi (sampai max-height di CSS).
-function autoGrowInput() {
-  const t = $("sendInput");
-  t.style.height = "auto";
-  t.style.height = Math.min(t.scrollHeight, 120) + "px";
-}
-$("sendInput").addEventListener("input", autoGrowInput);
+// Paste sebagai teks polos (cegah HTML/format ikut masuk ke editor).
+$("sendInput").addEventListener("paste", (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (items) { for (const it of items) if (it.kind === "file" && it.type.startsWith("image/")) return; } // gambar → biar handler attach
+  e.preventDefault();
+  const t = (e.clipboardData || window.clipboardData).getData("text");
+  if (t) document.execCommand("insertText", false, t);
+});
 
 async function sendTextMsg(text) {
   const quote = replyTo;          // snapshot lalu bersihkan bar reply
   clearReply();
-  $("sendInput").value = "";
-  autoGrowInput();
+  clearCompose();
   setBtnLoading($("sendBtn"), true);
   const box = $("messages");
   const tmpId = "tmp-" + Date.now();
@@ -1085,8 +1117,7 @@ async function sendTextMsg(text) {
     setTimeout(refreshNewest, 600);
   } catch (err) {
     removeBubble(tmpId);
-    $("sendInput").value = text; // kembalikan teks supaya tidak hilang
-    autoGrowInput();
+    setComposeText(text); // kembalikan teks supaya tidak hilang
     if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid); // kembalikan bar reply
     toast("Gagal kirim: " + err.message, "err");
   } finally {
@@ -1122,9 +1153,8 @@ async function sendMediaMsg(caption) {
   pendingFile = null;
   $("attachThumb").innerHTML = "";
   $("attachPreview").classList.add("hidden");
-  $("sendInput").value = "";
-  $("sendInput").placeholder = "Ketik pesan…";
-  autoGrowInput();
+  clearCompose();
+  setComposePlaceholder("Ketik pesan…");
 
   try {
     const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", fileName: kind === "document" ? file.name : "" });
@@ -1271,16 +1301,29 @@ function renderEmojiGrid() {
   document.querySelectorAll("#emojiTabs .etab").forEach((t) => t.classList.toggle("active", t.dataset.cat === emojiCat));
 }
 
-// Sisipkan emoji pada posisi kursor di textarea (atau di akhir bila tak fokus).
+// Sisipkan node pada posisi kursor di editor (contenteditable). Fallback ke akhir.
+function insertAtCaret(node) {
+  const root = $("sendInput");
+  root.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel && sel.rangeCount && root.contains(sel.anchorNode)) range = sel.getRangeAt(0);
+  else { range = document.createRange(); range.selectNodeContents(root); range.collapse(false); }
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node); range.collapse(true);
+  if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+}
+// Sisipkan emoji: token BBM → gambar (biar tampil langsung, bukan kode), unicode → teks.
 function insertEmoji(emo) {
-  const t = $("sendInput");
-  const s = typeof t.selectionStart === "number" ? t.selectionStart : t.value.length;
-  const e = typeof t.selectionEnd === "number" ? t.selectionEnd : t.value.length;
-  t.value = t.value.slice(0, s) + emo + t.value.slice(e);
-  const pos = s + emo.length;
-  t.focus();
-  t.setSelectionRange(pos, pos);
-  autoGrowInput();
+  const f = bbmFile(emo);
+  if (f) {
+    const img = document.createElement("img");
+    img.className = "bbm-emo"; img.src = f; img.dataset.code = emo; img.alt = emo;
+    insertAtCaret(img);
+  } else {
+    insertAtCaret(document.createTextNode(emo));
+  }
   pushRecentEmoji(emo);
 }
 
