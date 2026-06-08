@@ -526,7 +526,8 @@ body {
 .emoji-grid button img.bbm-pick { width: 28px; height: 28px; object-fit: contain; display: block; margin: 0 auto; }
 .bubble .body img.bbm-emo { width: 22px; height: 22px; vertical-align: -5px; object-fit: contain; }
 /* gambar BBM versi kecil di preview list / hasil cari / kutipan */
-.chat-item .preview img.bbm-emo, .search-result .sr-snippet img.bbm-emo, .bubble .quoted .q-text img.bbm-emo {
+.chat-item .preview img.bbm-emo, .search-result .sr-snippet img.bbm-emo,
+.bubble .quoted .q-text img.bbm-emo, .reply-bar-text img.bbm-emo {
   width: 15px; height: 15px; vertical-align: -3px; object-fit: contain;
 }
 .emoji-grid .egroup-label {

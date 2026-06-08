@@ -813,7 +813,7 @@ $("messages").addEventListener("scroll", closeMsgMenu);
 function startReply(id, sender, text, srcJid) {
   replyTo = { id, sender: sender || "", text: text || "", srcJid: srcJid || "" };
   $("replySender").textContent = sender || "Pesan";
-  $("replyText").textContent = text || "";
+  $("replyText").innerHTML = bbmify(escapeHtml(text || ""));
   $("replyBar").classList.remove("hidden");
   $("sendInput").focus();
 }
@@ -832,7 +832,7 @@ function scrollToMessage(id) {
 }
 function quoteBlockHTML(quote) {
   if (!quote) return "";
-  return `<div class="quoted" data-qid="${escapeHtml(quote.id || "")}"><div class="q-sender">${escapeHtml(quote.sender || "")}</div><div class="q-text">${escapeHtml(quote.text || "")}</div></div>`;
+  return `<div class="quoted" data-qid="${escapeHtml(quote.id || "")}"><div class="q-sender">${escapeHtml(quote.sender || "")}</div><div class="q-text">${bbmify(escapeHtml(quote.text || ""))}</div></div>`;
 }
 
 function openLightbox(url, kind) {
