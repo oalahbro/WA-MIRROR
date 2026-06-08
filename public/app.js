@@ -1044,8 +1044,8 @@ async function sendMediaMsg(caption) {
 // Warna aksen = override --green/--green-dark (+ tint bubble di tema terang).
 // Aksen dibuat theme-aware: di tema gelap varian aksen dibikin LEBIH TERANG
 // supaya tetap terbaca saat --green-dark dipakai sebagai warna teks.
-const THEMES = ["light", "dark", "senja"];
-const DARK_THEMES = new Set(["dark", "senja"]);
+const THEMES = ["light", "dark", "senja", "bbm"];
+const DARK_THEMES = new Set(["dark", "senja", "bbm"]);
 const ACCENTS = {
   green:  { base: "#00a884", light: "#008069", dark: "#21c7a8", bubble: "#d9fdd3" },
   blue:   { base: "#2f80ed", light: "#1c63c9", dark: "#53bdeb", bubble: "#d7e9ff" },
