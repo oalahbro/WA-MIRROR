@@ -546,6 +546,29 @@ function rebuildDaySeparators() {
 }
 const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "📄 Dokumen" };
 
+// Jadikan URL & "www." pada teks (SUDAH di-escape) sebagai tautan yang bisa diklik.
+// Aman: dijalankan pada string ter-escape, jadi tak ada injeksi. Tanda baca di ujung dipangkas.
+function linkify(escaped) {
+  return escaped.replace(/\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi, (m) => {
+    let url = m, tail = "";
+    const tm = url.match(/(?:&amp;|[.,!?:;)\]'"]+)$/);
+    if (tm) { tail = tm[0]; url = url.slice(0, -tail.length); }
+    if (!url) return m;
+    const href = url.startsWith("http") ? url : "http://" + url;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>${tail}`;
+  });
+}
+
+// Deteksi pesan yang isinya HANYA emoji (untuk ditampilkan besar ala WA).
+function isEmojiOnly(text) {
+  const t = (text || "").trim();
+  if (!t) return false;
+  try {
+    if (!/^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️|\s)+$/u.test(t)) return false;
+    return Array.from(t.replace(/\s/g, "")).length <= 8;
+  } catch (e) { return false; }
+}
+
 // Gambar masuk: thumbnail (img.show) tampil SEKETIKA → box langsung berukuran benar,
 // tak pernah blank putih. img.media-loader (tersembunyi) memuat resolusi penuh; saat siap
 // di-swap ke img.show (crisp, sudah ter-cache). Spinner saat memuat; tombol "muat ulang" bila gagal.
@@ -641,7 +664,9 @@ function renderBubble(m) {
     }
     if (bodyText === PLACEHOLDER_TEXT[m.type]) bodyText = ""; // jangan tampilkan placeholder sbg caption
   }
-  const bodyHTML = bodyText ? `<div class="body">${escapeHtml(bodyText)}</div>` : "";
+  const bodyHTML = bodyText ? `<div class="body">${linkify(escapeHtml(bodyText))}</div>` : "";
+  // pesan yang isinya hanya emoji → tampil besar tanpa bubble (ala WA)
+  const emojiOnly = bodyText && !mediaHTML && !m.quoted_id && isEmojiOnly(bodyText);
 
   // blok kutipan bila pesan ini membalas pesan lain
   let quotedHTML = "";
@@ -654,7 +679,7 @@ function renderBubble(m) {
   const replyPreview = bodyText || PLACEHOLDER_TEXT[m.type] || m.text || "";
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
-  return `<div class="bubble ${side}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
     <button class="reply-btn" title="Balas">↩</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
     <div class="meta">${fmtTime(m.timestamp)}</div>
@@ -692,6 +717,71 @@ $("messages").addEventListener("load", (e) => {
 $("messages").addEventListener("error", (e) => {
   if (e.target.classList && e.target.classList.contains("media-loader")) imgFailed(e.target);
 }, true);
+
+// ---------- menu konteks pesan (klik-kanan / long-press) ----------
+function openMsgMenu(b, x, y) {
+  const id = b.dataset.id, name = b.dataset.rsender || "", text = b.dataset.rtext || "", sender = b.dataset.sender || "";
+  const fromMe = b.classList.contains("me");
+  const inGroup = activeJid && activeJid.endsWith("@g.us");
+  const items = [];
+  if (text) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
+  items.push({ label: "↩️ Balas", act: () => startReply(id, name, text) });
+  // Balas pribadi: hanya di GRUP, pada pesan orang lain, & pengirim punya nomor (bukan @lid).
+  if (inGroup && !fromMe && sender.endsWith("@s.whatsapp.net")) {
+    items.push({ label: "👤 Balas pribadi", act: () => replyPrivately(sender, name, id, text) });
+  }
+  const menu = $("msgMenu");
+  menu.innerHTML = "";
+  items.forEach((it) => {
+    const btn = document.createElement("button");
+    btn.textContent = it.label;
+    btn.onclick = () => { closeMsgMenu(); it.act(); };
+    menu.appendChild(btn);
+  });
+  menu.classList.remove("hidden");
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + "px";
+  menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + "px";
+}
+function closeMsgMenu() { $("msgMenu").classList.add("hidden"); }
+
+async function copyText(t) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(t);
+    else { const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+    toast("Teks disalin", "ok", 1200);
+  } catch (e) { toast("Gagal menyalin", "err"); }
+}
+
+// Balas pribadi: buka chat pribadi pengirim lalu siapkan kutipan pesan grupnya.
+// Kutipan native nyambung bila pesan asli masih di cache server (forward); kalau tidak, tetap terkirim sbg teks.
+async function replyPrivately(senderJid, name, msgId, text) {
+  const title = name || senderJid.split("@")[0];
+  toast("Balas pribadi ke " + title, "", 1500);
+  await openChat(senderJid, title);
+  startReply(msgId, name || title, text);
+}
+
+$("messages").addEventListener("contextmenu", (e) => {
+  const b = e.target.closest(".bubble");
+  if (!b) return;
+  e.preventDefault();
+  openMsgMenu(b, e.clientX, e.clientY);
+});
+// Long-press untuk sentuh (mobile).
+let lpTimer = null;
+$("messages").addEventListener("touchstart", (e) => {
+  const b = e.target.closest(".bubble");
+  if (!b) return;
+  const t = e.touches[0];
+  lpTimer = setTimeout(() => openMsgMenu(b, t.clientX, t.clientY), 500);
+}, { passive: true });
+const cancelLp = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+$("messages").addEventListener("touchend", cancelLp);
+$("messages").addEventListener("touchmove", cancelLp);
+document.addEventListener("click", (e) => { if (!e.target.closest("#msgMenu")) closeMsgMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMsgMenu(); });
+$("messages").addEventListener("scroll", closeMsgMenu);
 
 // ---------- reply (balas/kutip) ----------
 function startReply(id, sender, text) {

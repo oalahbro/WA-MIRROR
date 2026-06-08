@@ -372,6 +372,23 @@ body {
 .bubble.pending { opacity: .6; }
 .bubble .sender { font-size: 12px; font-weight: 600; color: var(--green-dark); margin-bottom: 2px; }
 .bubble .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble .body a { color: var(--green-dark); text-decoration: underline; word-break: break-all; }
+.bubble .body a:hover { opacity: .85; }
+/* pesan hanya-emoji: besar & tanpa bubble */
+.bubble.emoji-only { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 2px; }
+.bubble.emoji-only .body { font-size: 40px; line-height: 1.15; }
+
+/* menu konteks pesan */
+.msg-menu {
+  position: fixed; z-index: 300; min-width: 168px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+.msg-menu button {
+  display: block; width: 100%; text-align: left; border: none; background: transparent;
+  color: var(--text); padding: 9px 12px; border-radius: 6px; cursor: pointer; font-size: 13.5px;
+}
+.msg-menu button:hover { background: var(--hover); }
 .bubble .meta { font-size: 10.5px; color: var(--muted); text-align: right; margin-top: 2px; }
 
 /* kutipan (reply) di dalam bubble */
