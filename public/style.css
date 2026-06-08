@@ -376,7 +376,7 @@ body {
 .bubble .body a:hover { opacity: .85; }
 /* pesan hanya-emoji: besar & tanpa bubble */
 .bubble.emoji-only { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 2px; }
-.bubble.emoji-only .body { font-size: 40px; line-height: 1.15; }
+.bubble.emoji-only .body { font-size: 44px; line-height: 1.15; }
 
 /* menu konteks pesan */
 .msg-menu {
@@ -525,6 +525,10 @@ body {
 .emoji-grid button:hover { background: var(--hover); }
 .emoji-grid button img.bbm-pick { width: 28px; height: 28px; object-fit: contain; display: block; margin: 0 auto; }
 .bubble .body img.bbm-emo { width: 22px; height: 22px; vertical-align: -5px; object-fit: contain; }
+/* gambar BBM versi kecil di preview list / hasil cari / kutipan */
+.chat-item .preview img.bbm-emo, .search-result .sr-snippet img.bbm-emo, .bubble .quoted .q-text img.bbm-emo {
+  width: 15px; height: 15px; vertical-align: -3px; object-fit: contain;
+}
 .emoji-grid .egroup-label {
   grid-column: 1 / -1; font-size: 11px; color: var(--muted); font-weight: 600;
   padding: 6px 2px 2px; text-transform: uppercase; letter-spacing: .03em;
@@ -539,7 +543,7 @@ body {
 .send-input img.bbm-emo { width: 22px; height: 22px; vertical-align: -5px; object-fit: contain; }
 /* pesan yang isinya hanya emoticon BBM → gambar besar tanpa bubble */
 .bubble.bbm-only { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 2px; }
-.bubble.bbm-only .body img.bbm-emo { width: 52px; height: 52px; vertical-align: middle; }
+.bubble.bbm-only .body img.bbm-emo { width: 57px; height: 57px; vertical-align: middle; }
 .send-btn {
   padding: 0 20px; min-width: 86px; height: 42px; background: var(--green); color: #fff; border: none; border-radius: 20px;
   cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px;

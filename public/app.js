@@ -287,8 +287,8 @@ function updateChatItem(el, c) {
   const timeEl = el.querySelector(".time");
   if (timeEl.textContent !== time) timeEl.textContent = time;
   const prevEl = el.querySelector(".preview");
-  const preview = c.last_text || "";
-  if (prevEl.textContent !== preview) prevEl.textContent = preview;
+  const previewHtml = bbmify(escapeHtml(c.last_text || ""));
+  if (prevEl.innerHTML !== previewHtml) prevEl.innerHTML = previewHtml;
   const pinBtn = el.querySelector(".pin-btn");
   const title = c.pinned ? "Lepas pin" : "Sematkan chat";
   if (pinBtn.title !== title) pinBtn.title = title;
@@ -354,7 +354,7 @@ async function runMsgSearch(q) {
     const who = r.from_me ? "Kamu: " : (r.is_group && r.sender_name ? escapeHtml(r.sender_name) + ": " : "");
     return `<div class="search-result" data-jid="${escapeHtml(r.jid)}" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.chat_name)}">
       <div class="sr-row"><span class="sr-name">${escapeHtml(r.chat_name)}${r.is_group ? " 👥" : ""}</span><span class="sr-time">${fmtTime(r.timestamp)}</span></div>
-      <div class="sr-snippet">${who}${highlightSnippet(r.text, q)}</div></div>`;
+      <div class="sr-snippet">${who}${bbmify(highlightSnippet(r.text, q))}</div></div>`;
   }).join("");
   renderSearchShell(items, results.length);
 }
@@ -565,6 +565,10 @@ function bbmify(escaped) {
   return escaped.replace(/:b(\d{3}):/g, '<img class="bbm-emo" src="/bbm/b$1.png" alt=":b$1:" loading="lazy">');
 }
 
+// Deteksi pesan yang isinya HANYA emoticon BBM (≤6 token) → tampil besar tanpa bubble.
+function isBbmOnly(text) {
+  return !!text && /^(?:\s*:b\d{3}:\s*)+$/.test(text) && (text.match(/:b\d{3}:/g) || []).length <= 6;
+}
 // Deteksi pesan yang isinya HANYA emoji (untuk ditampilkan besar ala WA).
 function isEmojiOnly(text) {
   const t = (text || "").trim();
@@ -673,16 +677,13 @@ function renderBubble(m) {
   const bodyHTML = bodyText ? `<div class="body">${bbmify(linkify(escapeHtml(bodyText)))}</div>` : "";
   // pesan yang isinya hanya emoji → tampil besar tanpa bubble (ala WA)
   const emojiOnly = bodyText && !mediaHTML && !m.quoted_id && isEmojiOnly(bodyText);
-  // pesan yang isinya hanya emoticon BBM (≤6) → gambar besar tanpa bubble
-  const bbmOnly = bodyText && !mediaHTML && !m.quoted_id
-    && /^(?:\s*:b\d{3}:\s*)+$/.test(bodyText)
-    && (bodyText.match(/:b\d{3}:/g) || []).length <= 6;
+  const bbmOnly = bodyText && !mediaHTML && !m.quoted_id && isBbmOnly(bodyText);
 
   // blok kutipan bila pesan ini membalas pesan lain
   let quotedHTML = "";
   if (m.quoted_id) {
     const qs = quotedLabel(m.quoted_sender);
-    quotedHTML = `<div class="quoted" data-qid="${escapeHtml(m.quoted_id)}">${qs ? `<div class="q-sender">${escapeHtml(qs)}</div>` : ""}<div class="q-text">${escapeHtml(m.quoted_text || "(media)")}</div></div>`;
+    quotedHTML = `<div class="quoted" data-qid="${escapeHtml(m.quoted_id)}">${qs ? `<div class="q-sender">${escapeHtml(qs)}</div>` : ""}<div class="q-text">${bbmify(escapeHtml(m.quoted_text || "(media)"))}</div></div>`;
   }
 
   // preview untuk dipakai saat pesan ini DIBALAS
@@ -1107,8 +1108,10 @@ async function sendTextMsg(text) {
   setBtnLoading($("sendBtn"), true);
   const box = $("messages");
   const tmpId = "tmp-" + Date.now();
+  // samakan dgn renderBubble: pesan tanpa kutipan yg isinya hanya emoji / emoticon BBM → tampil besar tanpa bubble
+  const bigCls = !quote ? (isEmojiOnly(text) ? " emoji-only" : isBbmOnly(text) ? " bbm-only" : "") : "";
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
   try {
