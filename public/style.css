@@ -10,6 +10,9 @@
   --pill: rgba(0,0,0,.05); --datesep: rgba(255,255,255,.92);
   --overlay: rgba(234,230,223,.6); --skel1: #eceff1; --skel2: #f5f7f8;
   --amber: #f0ad4e; --red: #e0524d; --blue: #2f80ed;
+  /* gaya bubble (default WhatsApp klasik) */
+  --bubble-radius: 8px; --bubble-tail: 8px; --bubble-pad: 7px 10px 5px;
+  --bubble-shadow: 0 1px 1px rgba(0,0,0,.06); --bubble-border: none;
 }
 :root[data-theme="dark"] {                    /* Gelap — dark mode teal */
   --green: #00a884; --green-dark: #21c7a8;
@@ -21,6 +24,9 @@
   --pill: rgba(255,255,255,.08); --datesep: #1d282f;
   --overlay: rgba(11,20,26,.6); --skel1: #1b262c; --skel2: #243039;
   --amber: #f0ad4e; --red: #f15c57; --blue: #53bdeb;
+  /* gaya bubble: modern membulat + sudut ekor asimetris */
+  --bubble-radius: 14px; --bubble-tail: 4px; --bubble-pad: 8px 12px 6px;
+  --bubble-shadow: 0 1px 2px rgba(0,0,0,.35); --bubble-border: none;
 }
 :root[data-theme="senja"] {                   /* Senja — dark hangat (sunset) */
   --green: #f0900c; --green-dark: #f6a93b;
@@ -32,6 +38,9 @@
   --pill: rgba(255,255,255,.07); --datesep: #2a2230;
   --overlay: rgba(27,22,32,.62); --skel1: #2a2230; --skel2: #352b3e;
   --amber: #f0ad4e; --red: #f15c57; --blue: #c79bff;
+  /* gaya bubble: pillowy super bulat + shadow lembut */
+  --bubble-radius: 18px; --bubble-tail: 18px; --bubble-pad: 9px 14px 7px;
+  --bubble-shadow: 0 2px 7px rgba(0,0,0,.3); --bubble-border: none;
 }
 :root[data-theme="bbm"] {                     /* BBM — BlackBerry Messenger klasik (gunmetal + biru baja) */
   --green: #4f93c4; --green-dark: #82b6dd;
@@ -43,6 +52,9 @@
   --pill: rgba(255,255,255,.07); --datesep: #24292f;
   --overlay: rgba(21,23,26,.62); --skel1: #24292f; --skel2: #2e343b;
   --amber: #f0ad4e; --red: #f15c57; --blue: #82b6dd;
+  /* gaya bubble: kotak klasik BBM, flat + garis tepi */
+  --bubble-radius: 3px; --bubble-tail: 3px; --bubble-pad: 6px 10px 5px;
+  --bubble-shadow: none; --bubble-border: 1px solid var(--border);
 }
 html, body { height: 100%; }
 body {
@@ -350,13 +362,13 @@ body {
   /* lebar maksimum ala WhatsApp: 65% di layar sempit, mentok ~480px di layar lebar
      supaya teks panjang otomatis turun baris & enak dibaca */
   max-width: min(65%, 30rem);
-  padding: 7px 10px 5px; border-radius: 8px; font-size: 14px; line-height: 1.35;
-  box-shadow: 0 1px 1px rgba(0,0,0,.06); word-wrap: break-word; position: relative;
+  padding: var(--bubble-pad); border-radius: var(--bubble-radius); font-size: 14px; line-height: 1.35;
+  box-shadow: var(--bubble-shadow); border: var(--bubble-border); word-wrap: break-word; position: relative;
   animation: fadein .18s ease;
 }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-.bubble.me { align-self: flex-end; background: var(--bubble-me); }
-.bubble.other { align-self: flex-start; background: var(--bubble-other); }
+.bubble.me { align-self: flex-end; background: var(--bubble-me); border-bottom-right-radius: var(--bubble-tail); }
+.bubble.other { align-self: flex-start; background: var(--bubble-other); border-bottom-left-radius: var(--bubble-tail); }
 .bubble.pending { opacity: .6; }
 .bubble .sender { font-size: 12px; font-weight: 600; color: var(--green-dark); margin-bottom: 2px; }
 .bubble .body { white-space: pre-wrap; overflow-wrap: anywhere; }
