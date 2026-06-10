@@ -138,9 +138,11 @@ const _getMessages = db.prepare(`
          COALESCE(NULLIF(ct.name, ''), m.sender) AS sender_name,
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
          m.quoted_id, m.quoted_text, m.quoted_sender,
+         COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
          m.media_mime, m.file_name, m.file_size
   FROM messages m
   LEFT JOIN contacts ct ON ct.jid = m.sender
+  LEFT JOIN contacts qc ON qc.jid = m.quoted_sender
   WHERE m.chat_jid = @jid AND m.timestamp < @before
   ORDER BY m.timestamp DESC
   LIMIT @limit

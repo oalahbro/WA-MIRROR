@@ -12,6 +12,7 @@ let lastStats = { chats: -1, messages: -1 };
 let lastConnState = "";   // untuk toast transisi koneksi
 let loadingOlder = false;
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
+let myJidLid = "";        // jid LID akun sendiri (di grup) — untuk deteksi "Kamu"
 let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
 let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
 let msgSearchMode = false;   // true saat menampilkan hasil cari ISI pesan
@@ -122,6 +123,7 @@ async function checkStatus() {
   if (s.connected) {
     $("qrOverlay").classList.add("hidden");
     if (s.me) { myJid = s.me; $("meLabel").textContent = "📱 " + s.me.split("@")[0]; }
+    if (s.meLid) myJidLid = s.meLid;
   } else {
     $("qrOverlay").classList.remove("hidden");
     if (s.qr) { $("qrImg").src = s.qr; $("qrImg").classList.remove("hidden"); $("qrWait").classList.add("hidden"); }
@@ -644,11 +646,15 @@ async function downloadDoc(url, name) {
   }
 }
 
-// Nama pengirim untuk label kutipan: "Kamu" bila itu akun sendiri.
-function quotedLabel(senderJid) {
+// Nama pengirim untuk label kutipan: "Kamu" bila akun sendiri (cocokkan nomor & LID),
+// kalau bukan pakai nama kontak; fallback ke nomor bila nama tak diketahui.
+function quotedLabel(senderJid, senderName) {
   if (!senderJid) return "";
-  if (myJid && senderJid.split("@")[0] === myJid.split("@")[0]) return "Kamu";
-  return senderJid.split("@")[0];
+  const num = senderJid.split("@")[0].split(":")[0];
+  if (myJid && num === myJid.split("@")[0].split(":")[0]) return "Kamu";
+  if (myJidLid && num === myJidLid.split("@")[0].split(":")[0]) return "Kamu";
+  if (senderName && !senderName.includes("@")) return senderName;
+  return num;
 }
 
 function renderBubble(m) {
@@ -682,7 +688,7 @@ function renderBubble(m) {
   // blok kutipan bila pesan ini membalas pesan lain
   let quotedHTML = "";
   if (m.quoted_id) {
-    const qs = quotedLabel(m.quoted_sender);
+    const qs = quotedLabel(m.quoted_sender, m.quoted_sender_name);
     quotedHTML = `<div class="quoted" data-qid="${escapeHtml(m.quoted_id)}">${qs ? `<div class="q-sender">${escapeHtml(qs)}</div>` : ""}<div class="q-text">${bbmify(escapeHtml(m.quoted_text || "(media)"))}</div></div>`;
   }
 

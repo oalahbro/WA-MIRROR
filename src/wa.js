@@ -603,6 +603,7 @@ function getStatus() {
     connected: status.connected,
     qr: status.qr,
     me: status.me,
+    meLid: status.meLid,
     reconnecting: status.reconnecting,
     syncing,
     syncedMessages: status.syncedMessages,
