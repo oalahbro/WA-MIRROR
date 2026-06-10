@@ -1532,10 +1532,6 @@ if ("serviceWorker" in navigator) {
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
-  // DEBUG sementara (hapus nanti).
-  const dbg = document.createElement("div");
-  dbg.style.cssText = "position:fixed;left:2px;z-index:99999;background:rgba(0,0,0,.82);color:#0f0;font:11px monospace;padding:3px 6px;border-radius:5px;pointer-events:none;white-space:pre";
-  document.body.appendChild(dbg);
   let maxVH = 0;
   const onVV = () => {
     maxVH = Math.max(maxVH, vv.height);
@@ -1552,9 +1548,6 @@ if (window.visualViewport) {
     } else {
       app.style.position = ""; app.style.left = ""; app.style.top = ""; app.style.width = ""; app.style.height = "";
     }
-    dbg.style.top = (vv.offsetTop + vv.height - 26) + "px";   // pojok kiri-bawah area terlihat
-    dbg.textContent = "ih:" + window.innerHeight + " vvh:" + Math.round(vv.height)
-      + " vot:" + Math.round(vv.offsetTop) + " kb:" + kbOpen;
   };
   vv.addEventListener("resize", onVV);
   vv.addEventListener("scroll", onVV);
