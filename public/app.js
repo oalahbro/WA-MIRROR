@@ -449,28 +449,39 @@ function wireAvatarLoaders(container) {
 wireAvatarLoaders($("chatList"));
 wireAvatarLoaders($("convAvatar"));
 
-// Long-press chat (mobile) → munculkan tombol pin pada chat itu (tanpa membuka chat).
-// Tombol pin chat belum-dipin disembunyikan default (CSS), baru tampak via class .reveal-pin.
-let lpChatTimer = null, pinRevealTimer = null, lpChatFired = false;
-function revealPin(item) {
-  document.querySelectorAll(".chat-item.reveal-pin").forEach((el) => { if (el !== item) el.classList.remove("reveal-pin"); });
-  item.classList.add("reveal-pin");
-  clearTimeout(pinRevealTimer);
-  pinRevealTimer = setTimeout(() => item.classList.remove("reveal-pin"), 3500);
-}
-const cancelChatLp = () => { if (lpChatTimer) { clearTimeout(lpChatTimer); lpChatTimer = null; } };
+// Swipe chat ke KIRI (mobile) → sematkan / lepas pin. Item ikut jari; lepas lewat ambang → toggle.
+// Tap normal tak terpengaruh (buka chat sekali tap) — preventDefault hanya saat ada gestur swipe.
+let spEl = null, spX = 0, spY = 0, spDx = 0, spActive = false;
 $("chatList").addEventListener("touchstart", (e) => {
+  if (window.innerWidth > 768 || e.touches.length > 1) return;
   const item = e.target.closest(".chat-item");
   if (!item) return;
-  lpChatFired = false;
-  lpChatTimer = setTimeout(() => { lpChatFired = true; revealPin(item); }, 450);
+  const t = e.touches[0];
+  spEl = item; spX = t.clientX; spY = t.clientY; spDx = 0; spActive = false;
 }, { passive: true });
-$("chatList").addEventListener("touchend", (e) => {
-  cancelChatLp();
-  // Long-press tadi terpicu → cegah klik-sintetis biar chat TIDAK ikut kebuka (tanpa dobel-tap).
-  if (lpChatFired) { e.preventDefault(); lpChatFired = false; }
+$("chatList").addEventListener("touchmove", (e) => {
+  if (!spEl) return;
+  const t = e.touches[0];
+  const dx = t.clientX - spX, dy = t.clientY - spY;
+  if (!spActive) {
+    if (Math.abs(dy) > Math.abs(dx)) { spEl = null; return; }  // vertikal → biarkan scroll list
+    if (dx > -8) return;                                        // belum cukup ke kiri
+    spActive = true; spEl.style.transition = "none"; spEl.classList.add("sw-pin");
+  }
+  if (dx < 0) { spDx = Math.max(dx, -96); e.preventDefault(); spEl.style.transform = "translateX(" + spDx + "px)"; }
 }, { passive: false });
-$("chatList").addEventListener("touchmove", cancelChatLp);
+function endSwipePin(e) {
+  if (!spEl) return;
+  const el = spEl, dx = spDx, acted = spActive;
+  el.style.transition = ""; el.style.transform = ""; el.classList.remove("sw-pin");
+  spEl = null; spDx = 0; spActive = false;
+  if (acted) {                                   // ada gestur swipe → jangan buka chat
+    if (e && e.cancelable) e.preventDefault();
+    if (dx < -55) togglePin(el.dataset.jid);
+  }
+}
+$("chatList").addEventListener("touchend", endSwipePin, { passive: false });
+$("chatList").addEventListener("touchcancel", endSwipePin);
 
 // ---------- conversation ----------
 async function openChat(jid, title) {
