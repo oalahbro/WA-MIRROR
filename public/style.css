@@ -120,7 +120,7 @@ body {
 /* ---------- app layout ---------- */
 .app { display: flex; height: 100vh; height: 100dvh; position: relative; overflow: hidden; }
 .sidebar {
-  flex: 0 0 418px; width: 418px;          /* lebar tetap, tidak ikut berubah */
+  flex: 0 0 460px; width: 460px;          /* lebar tetap, tidak ikut berubah */
   min-width: 0; background: var(--panel);
   border-right: 1px solid var(--border); display: flex; flex-direction: column;
 }
@@ -427,13 +427,13 @@ body {
 
 /* media di dalam bubble */
 .bubble .media { display: block; border-radius: 6px; margin-bottom: 4px; max-width: 100%; }
-.bubble img.media { max-height: 300px; cursor: pointer; }
-.bubble video.media { max-height: 320px; width: 100%; background: #000; }
+.bubble img.media { max-height: 330px; cursor: pointer; }
+.bubble video.media { max-height: 352px; width: 100%; background: #000; }
 .bubble .media-video { position: relative; display: inline-block; cursor: pointer; }
-.bubble .media-video img.media, .bubble .media-video video.media { max-height: 300px; }
+.bubble .media-video img.media, .bubble .media-video video.media { max-height: 330px; }
 /* thumbnail gambar dari chat orang lain dibuat 20% lebih besar */
 .bubble.other:has(img.media) { max-width: min(78%, 36rem); }
-.bubble.other img.media, .bubble.other .media-video img.media { max-height: 360px; }
+.bubble.other img.media, .bubble.other .media-video img.media { max-height: 396px; }
 
 /* gambar masuk: state loading / gagal muat */
 .bubble .media-img { position: relative; display: inline-block; line-height: 0; overflow: hidden; border-radius: 6px; }
@@ -444,7 +444,9 @@ body {
 .bubble .media-img.failed img.show { filter: brightness(.8); }
 .bubble .media-img .media-spin, .bubble .media-img .media-retry { display: none; }
 .bubble .media-img.loading .media-spin {
-  display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  /* di-tengah pakai calc (BUKAN transform translate) supaya tak bentrok dgn animasi
+     rotate spinner — kalau pakai translate, transform-nya ketiban rotate → goyang, tak muter */
+  display: block; position: absolute; top: calc(50% - 7px); left: calc(50% - 7px);
   filter: drop-shadow(0 0 2px rgba(0,0,0,.55)); /* kontras di atas gambar terang */
 }
 .bubble .media-img.failed .media-retry {
