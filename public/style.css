@@ -653,5 +653,5 @@ body {
 
   /* cegah auto-zoom browser HP saat fokus ke input (terjadi bila font <16px).
      Font 16px menonaktifkan auto-zoom TANPA mematikan pinch-zoom. */
-  .search, .send-input, .login-box input, #tokenInput { font-size: 16px; }
+  .search, .send-input, .login-box input, #tokenInput, .newchat-popover input { font-size: 16px; }
 }
