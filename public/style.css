@@ -634,11 +634,24 @@ body {
   /* tampilkan tombol kembali */
   .back-btn { display: flex; }
 
-  /* afordans hover tak ada di sentuh → buat selalu tampak.
-     pin-btn diberi kolom kanan sendiri agar tidak menutupi waktu/badge */
-  .chat-item { padding-right: 42px; }
-  .chat-item .pin-btn { opacity: .5; top: 50%; right: 8px; transform: translateY(-50%); }
+  .chat-item { padding-right: 42px; -webkit-user-select: none; user-select: none; }
+  /* pin-btn: chat BELUM dipin → disembunyikan, muncul saat long-press (.reveal-pin).
+     chat yang SUDAH dipin tetap tampak agar gampang di-unpin. */
+  .chat-item .pin-btn { top: 50%; right: 8px; transform: translateY(-50%); }
+  .chat-item:not(.pinned) .pin-btn { opacity: 0; }
+  .chat-item:not(.pinned).reveal-pin .pin-btn { opacity: 1; }
+  .chat-item.pinned .pin-btn { opacity: .55; }
+  .chat-item.reveal-pin { background: var(--active); }
   .bubble .reply-btn { opacity: .55; }
+
+  /* filter Semua/Pribadi/Grup → bar floating di bawah (ala WA iOS) */
+  .chat-filters {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; margin-top: 0;
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .chat-list { padding-bottom: 72px; }            /* ruang untuk bar floating */
+  .app.chat-open .chat-filters { display: none; } /* sembunyi saat di percakapan */
 
   /* bubble & padding lebih lega di layar sempit */
   .messages { padding: 12px 5%; }
