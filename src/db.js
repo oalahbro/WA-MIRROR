@@ -296,10 +296,28 @@ function searchMessages(q, limit = 50) {
   return _searchMessages.all({ q: "%" + esc + "%", limit: Math.min(Math.max(limit, 1), 100) });
 }
 
+// Total ukuran folder data (DB + WAL + media + avatar). Di-cache 60 dtk (dipanggil tiap poll).
+let _sizeCache = { at: 0, bytes: 0 };
+function dirSize(dir) {
+  let total = 0, entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return 0; }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    try { total += e.isDirectory() ? dirSize(p) : fs.statSync(p).size; } catch (_) {}
+  }
+  return total;
+}
+function dataSize() {
+  const now = Date.now();
+  if (now - _sizeCache.at < 60000) return _sizeCache.bytes;
+  _sizeCache = { at: now, bytes: dirSize(path.dirname(DB_PATH)) };
+  return _sizeCache.bytes;
+}
+
 function stats() {
   const c = db.prepare("SELECT COUNT(*) n FROM chats").get().n;
   const m = db.prepare("SELECT COUNT(*) n FROM messages").get().n;
-  return { chats: c, messages: m };
+  return { chats: c, messages: m, dataBytes: dataSize() };
 }
 
 module.exports = {

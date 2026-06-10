@@ -172,6 +172,7 @@ function updateStats(stats) {
   const changed = stats.chats !== lastStats.chats || stats.messages !== lastStats.messages;
   $("statChats").textContent = stats.chats;
   $("statMsgs").textContent = stats.messages.toLocaleString("id-ID");
+  if (stats.dataBytes != null) $("statSize").textContent = fmtSize(stats.dataBytes);
   if (changed && lastStats.chats !== -1) {
     line.classList.remove("bump"); void line.offsetWidth; line.classList.add("bump");
   }
@@ -1112,7 +1113,8 @@ document.addEventListener("paste", (e) => {
 function fmtSize(b) {
   if (b < 1024) return b + " B";
   if (b < 1024 * 1024) return (b / 1024).toFixed(0) + " KB";
-  return (b / 1024 / 1024).toFixed(1) + " MB";
+  if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + " MB";
+  return (b / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
 function showAttachPreview() {
   const p = pendingFile;

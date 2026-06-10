@@ -160,9 +160,9 @@ body {
 .nc-err { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 14px; }
 .nc-close {
   position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border: none; border-radius: 50%;
-  background: rgba(0,0,0,.06); color: var(--muted); font-size: 12px; cursor: pointer; line-height: 1;
+  background: var(--red); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1;
 }
-.nc-close:hover { background: var(--hover); }
+.nc-close:hover { filter: brightness(.9); }
 .newchat-popover .theme-title { padding-right: 28px; }
 
 .theme-title { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
