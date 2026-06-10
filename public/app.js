@@ -1548,7 +1548,7 @@ if (window.visualViewport) {
       app.style.left = vv.offsetLeft + "px";
       app.style.top = vv.offsetTop + "px";
       app.style.width = vv.width + "px";
-      app.style.height = (vv.height + 12) + "px";  // dorong compose lebih nempel ke keyboard
+      app.style.height = (vv.height + 8) + "px";   // dorong compose nempel ke keyboard (pas)
     } else {
       app.style.position = ""; app.style.left = ""; app.style.top = ""; app.style.width = ""; app.style.height = "";
     }
