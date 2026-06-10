@@ -47,7 +47,7 @@
   --bg: #15171a; --panel: #20242a; --panel-2: #2a2f36;
   --border: #3a4048; --divider: #24292f;
   --text: #e6eaee; --muted: #98a2ac;
-  --bubble-me: #34495e; --bubble-other: #2a2f36;
+  --bubble-me: #3689AA; --bubble-other: #D8D8D8;
   --input: #2e343b; --hover: #2e343b; --active: #353c44; --pinned: #1c2a33;
   --pill: rgba(255,255,255,.07); --datesep: #24292f;
   --overlay: rgba(21,23,26,.62); --skel1: #24292f; --skel2: #2e343b;
@@ -56,6 +56,13 @@
   --bubble-radius: 3px; --bubble-tail: 3px; --bubble-pad: 6px 10px 5px;
   --bubble-shadow: none; --bubble-border: 1px solid var(--border);
 }
+/* BBM: bubble lawan terang (#D8D8D8) → teks & elemen di dalamnya dibuat gelap biar terbaca */
+:root[data-theme="bbm"] .bubble.other { color: #15171a; }
+:root[data-theme="bbm"] .bubble.other .meta { color: #5b6a73; }
+:root[data-theme="bbm"] .bubble.other .sender,
+:root[data-theme="bbm"] .bubble.other .body a,
+:root[data-theme="bbm"] .bubble.other .quoted .q-sender { color: #1f6f95; }
+:root[data-theme="bbm"] .bubble.other .quoted .q-text { color: #4a575f; }
 html, body { height: 100%; overflow: hidden; }
 body {
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
