@@ -1524,13 +1524,17 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// Deteksi keyboard muncul (visualViewport menyusut) → tandai .kb-open di <html> supaya
-// gap safe-area di bawah compose dihilangkan (mobile). Tak ada efek di desktop.
+// iOS: 100dvh TIDAK menyusut saat keyboard muncul → .app tetap setinggi layar penuh &
+// compose kedorong di belakang keyboard (muncul "space tebal"). Fix: kecilkan tinggi .app
+// ke tinggi visualViewport saat keyboard naik → compose nempel pas di atas keyboard.
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const onVV = () => {
     const kbOpen = (window.innerHeight - vv.height) > 150; // ambang tinggi keyboard
     document.documentElement.classList.toggle("kb-open", kbOpen);
+    const app = $("app");
+    if (kbOpen) { app.style.height = vv.height + "px"; window.scrollTo(0, 0); }
+    else { app.style.height = ""; }
   };
   vv.addEventListener("resize", onVV);
 }
