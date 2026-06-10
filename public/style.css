@@ -42,8 +42,8 @@
   --bubble-radius: 18px; --bubble-tail: 18px; --bubble-pad: 9px 14px 7px;
   --bubble-shadow: 0 2px 7px rgba(0,0,0,.3); --bubble-border: none;
 }
-:root[data-theme="bbm"] {                     /* BBM — BlackBerry Messenger klasik (gunmetal + biru baja) */
-  --green: #4f93c4; --green-dark: #82b6dd;
+:root[data-theme="bbm"] {                     /* BBM — BlackBerry Messenger klasik (gunmetal) */
+  --green: #087099; --green-dark: #3ba3cc;
   --bg: #15171a; --panel: #20242a; --panel-2: #2a2f36;
   --border: #3a4048; --divider: #24292f;
   --text: #e6eaee; --muted: #98a2ac;
@@ -63,6 +63,10 @@
 :root[data-theme="bbm"] .bubble.other .body a,
 :root[data-theme="bbm"] .bubble.other .quoted .q-sender { color: #1f6f95; }
 :root[data-theme="bbm"] .bubble.other .quoted .q-text { color: #4a575f; }
+/* BBM: blok kutipan di bubble-ku (biru) → latar lebih gelap + teks terang biar terbaca */
+:root[data-theme="bbm"] .bubble.me .quoted { background: rgba(0,0,0,.22); }
+:root[data-theme="bbm"] .bubble.me .quoted .q-sender { color: #cfe8f3; }
+:root[data-theme="bbm"] .bubble.me .quoted .q-text { color: #eaf4f9; }
 html, body { height: 100%; overflow: hidden; }
 body {
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -198,7 +202,7 @@ body {
 .theme-prev[data-t="light"]::after { background: #00a884; }
 .theme-prev[data-t="dark"]::after  { background: #00a884; }
 .theme-prev[data-t="senja"]::after { background: #f0900c; }
-.theme-prev[data-t="bbm"]::after   { background: #4f93c4; }
+.theme-prev[data-t="bbm"]::after   { background: #087099; }
 .accent-title { margin-top: 14px; }
 .accent-swatches { display: flex; gap: 9px; flex-wrap: wrap; }
 .swatch {
