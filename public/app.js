@@ -1529,12 +1529,24 @@ if ("serviceWorker" in navigator) {
 // ke tinggi visualViewport saat keyboard naik → compose nempel pas di atas keyboard.
 if (window.visualViewport) {
   const vv = window.visualViewport;
+  const app = $("app");
+  // DEBUG sementara (hapus nanti): tampilkan angka viewport biar bisa diagnosa di HP.
+  const dbg = document.createElement("div");
+  dbg.style.cssText = "position:fixed;top:2px;left:2px;z-index:99999;background:rgba(0,0,0,.82);color:#0f0;font:11px monospace;padding:3px 6px;border-radius:5px;pointer-events:none;white-space:pre";
+  document.body.appendChild(dbg);
   const onVV = () => {
     const kbOpen = (window.innerHeight - vv.height) > 150; // ambang tinggi keyboard
     document.documentElement.classList.toggle("kb-open", kbOpen);
-    const app = $("app");
-    if (kbOpen) { app.style.height = vv.height + "px"; window.scrollTo(0, 0); }
-    else { app.style.height = ""; }
+    if (kbOpen) {
+      app.style.height = vv.height + "px";
+      app.style.transform = "translateY(" + vv.offsetTop + "px)"; // kompensasi geseran scroll iOS
+    } else {
+      app.style.height = ""; app.style.transform = "";
+    }
+    dbg.textContent = "ih:" + window.innerHeight + " vvh:" + Math.round(vv.height)
+      + " vot:" + Math.round(vv.offsetTop) + " kb:" + kbOpen + " ah:" + (app.style.height || "-");
   };
   vv.addEventListener("resize", onVV);
+  vv.addEventListener("scroll", onVV);
+  onVV();
 }
