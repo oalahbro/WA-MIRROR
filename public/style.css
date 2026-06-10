@@ -640,6 +640,9 @@ body {
   /* tampilkan tombol kembali */
   .back-btn { display: flex; }
 
+  /* input/compose jangan mepet bawah (home indicator iPhone) → angkat pakai safe-area + ekstra */
+  .compose { padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+
   .chat-item { -webkit-user-select: none; user-select: none; }
   /* mobile: pin/unpin lewat SWIPE KIRI, bukan tombol → sembunyikan tombol pin */
   .chat-item .pin-btn { display: none; }
