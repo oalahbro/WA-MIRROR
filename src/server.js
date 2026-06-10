@@ -263,6 +263,19 @@ app.post("/api/send", requireAuth, async (req, res) => {
   }
 });
 
+// Edit pesan sendiri. Body: { jid, id, text }
+app.post("/api/edit", requireAuth, async (req, res) => {
+  const { jid, id, text } = req.body || {};
+  if (!jid || !id || !text) return res.status(400).json({ error: "jid, id, text wajib" });
+  try {
+    await wa.editMessage(jid, id, text);
+    store.editMessageText(jid, id, text); // langsung sinkron di DB (echo edit juga akan update, idempoten)
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Kirim media (foto/video). Body = biner mentah file; metadata via query.
 const MAX_MEDIA = 64 * 1024 * 1024; // 64 MB
 app.post(

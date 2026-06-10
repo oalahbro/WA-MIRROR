@@ -466,6 +466,19 @@ async function start() {
     status.lastActivityAt = Date.now();
   });
 
+  // Pesan diedit (dari HP atau echo edit dari mirror) → Baileys emit messages.update
+  // dengan update.message.editedMessage + key.id = id pesan ASLI. Perbarui teks di DB.
+  sock.ev.on("messages.update", (updates) => {
+    for (const u of updates || []) {
+      const em = u.update?.message?.editedMessage?.message;
+      if (!em) continue;
+      const jid = u.key?.remoteJid, id = u.key?.id;
+      if (!jid || !id) continue;
+      const { text } = extractContent(em);
+      if (text) store.editMessageText(jid, id, text);
+    }
+  });
+
   // Update kontak & metadata
   sock.ev.on("contacts.upsert", (cs) => {
     for (const c of cs) store.upsertContact(c.id, c.name || c.notify || c.verifiedName || "");
@@ -508,6 +521,14 @@ function buildQuoted(jid, quotedId, srcJid) {
     },
     message: { conversation: row.text || "" },
   };
+}
+
+// Edit pesan SENDIRI (WhatsApp: hanya pesan sendiri & <15 menit). key = pesan asli.
+async function editMessage(jid, id, text) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!jid || !id || !text) throw new Error("jid, id, text wajib");
+  const sent = await sock.sendMessage(jid, { text, edit: { remoteJid: jid, fromMe: true, id } });
+  return sent?.key?.id || null;
 }
 
 async function sendMessage(jid, text, quotedId, quotedJid) {
@@ -631,7 +652,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getStatus };
+module.exports = { start, sendMessage, sendMedia, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

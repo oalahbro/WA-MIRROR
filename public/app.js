@@ -14,6 +14,7 @@ let loadingOlder = false;
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
 let myJidLid = "";        // jid LID akun sendiri (di grup) — untuk deteksi "Kamu"
 let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
+let editingId = null;     // id pesan yang sedang diedit (null = tidak sedang edit)
 let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
 let msgSearchMode = false;   // true saat menampilkan hasil cari ISI pesan
 let msgSearchQuery = "";
@@ -764,10 +765,10 @@ function renderBubble(m) {
   const replyPreview = bodyText || PLACEHOLDER_TEXT[m.type] || m.text || "";
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
-  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
     <button class="menu-btn" title="Menu pesan">⋮</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
-    <div class="meta">${fmtTime(m.timestamp)}</div>
+    <div class="meta">${m.edited ? "diedit · " : ""}${fmtTime(m.timestamp)}</div>
   </div>`;
 }
 
@@ -812,6 +813,12 @@ function openMsgMenu(b, x, y) {
   const items = [];
   if (text) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
   items.push({ label: "↩️ Balas", act: () => startReply(id, name, text) });
+  // Edit: hanya pesan SENDIRI, berupa teks (tanpa media), & masih < 15 menit (batas WhatsApp).
+  const ts = Number(b.dataset.ts) || 0;
+  const hasMedia = b.querySelector(".media-img, .media-video, .doc-chip");
+  if (fromMe && b.querySelector(".body") && !hasMedia && (Date.now() / 1000 - ts) < 900) {
+    items.push({ label: "✏️ Edit", act: () => startEdit(id, b.dataset.text || text) });
+  }
   // Balas pribadi: di GRUP, pada pesan orang lain dengan pengirim ber-jid
   // (@s.whatsapp.net atau @lid — yang @lid di-resolve ke nomor asli saat diklik).
   if (inGroup && !fromMe && (sender.endsWith("@s.whatsapp.net") || sender.endsWith("@lid"))) {
@@ -929,6 +936,48 @@ function clearReply() {
 }
 $("replyCancel").onclick = clearReply;
 
+// ---------- edit pesan ----------
+function startEdit(id, text) {
+  clearReply();
+  editingId = id;
+  $("editText").textContent = text || "";
+  $("editBar").classList.remove("hidden");
+  setComposeText(text || "");
+  $("sendInput").focus();
+}
+function cancelEdit() {
+  editingId = null;
+  $("editBar").classList.add("hidden");
+  clearCompose();
+}
+$("editCancel").onclick = cancelEdit;
+function markEdited(b) {
+  const meta = b.querySelector(".meta");
+  if (meta && !meta.dataset.edited) { meta.dataset.edited = "1"; meta.textContent = "diedit · " + meta.textContent; }
+}
+async function submitEdit() {
+  const text = getComposeText().trim();
+  const id = editingId;
+  if (!text || !id) { cancelEdit(); return; }
+  setBtnLoading($("sendBtn"), true);
+  try {
+    await api("/api/edit", { method: "POST", body: JSON.stringify({ jid: activeJid, id, text }) });
+    const b = $("messages").querySelector(`.bubble[data-id="${CSS.escape(id)}"]`);
+    if (b) {
+      b.dataset.text = text; b.dataset.rtext = text;
+      const body = b.querySelector(".body");
+      if (body) body.innerHTML = bbmify(linkify(escapeHtml(text)));
+      markEdited(b);
+    }
+    cancelEdit();
+    toast("Pesan diedit", "ok", 1500);
+  } catch (e) {
+    toast("Gagal edit: " + e.message, "err");
+  } finally {
+    setBtnLoading($("sendBtn"), false);
+  }
+}
+
 function scrollToMessage(id) {
   let el = null;
   try { el = $("messages").querySelector(`.bubble[data-id="${CSS.escape(id)}"]`); } catch (e) {}
@@ -1005,6 +1054,17 @@ async function refreshNewest() {
   let msgs;
   try { msgs = await api(`/api/messages?jid=${encodeURIComponent(activeJid)}&limit=20`); }
   catch (e) { return; }
+  // Pesan yang teksnya berubah (mis. diedit dari HP) → perbarui bubble di tempat.
+  for (const m of msgs) {
+    let ex = null;
+    try { ex = box.querySelector(`.bubble[data-id="${CSS.escape(m.id)}"]`); } catch (e2) {}
+    if (ex && (m.text || "") !== (ex.dataset.text || "")) {
+      ex.dataset.text = m.text || ""; ex.dataset.rtext = m.text || "";
+      const body = ex.querySelector(".body");
+      if (body) body.innerHTML = bbmify(linkify(escapeHtml(m.text || "")));
+      if (m.edited) markEdited(ex);
+    }
+  }
   const fresh = msgs.filter((m) => m.timestamp > lastTs).reverse();
   if (fresh.length) {
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
@@ -1187,6 +1247,7 @@ function autoGrowInput() {}   // contenteditable tumbuh sendiri (CSS min/max-hei
 $("sendForm").addEventListener("submit", (e) => {
   e.preventDefault();
   if (!activeJid) return;
+  if (editingId) { submitEdit(); return; }   // mode edit → simpan editan, bukan kirim baru
   const text = getComposeText().trim();
   if (pendingFile) { sendMediaMsg(text); return; }
   if (text) sendTextMsg(text);
@@ -1218,7 +1279,7 @@ async function sendTextMsg(text) {
   // samakan dgn renderBubble: pesan tanpa kutipan yg isinya hanya emoji / emoticon BBM → tampil besar tanpa bubble
   const bigCls = !quote ? (isEmojiOnly(text) ? " emoji-only" : isBbmOnly(text) ? " bbm-only" : "") : "";
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-text="${escapeHtml(text)}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
   try {

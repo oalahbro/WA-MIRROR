@@ -49,6 +49,7 @@ for (const col of [
   "mentioned INTEGER DEFAULT 0", // 1 bila pesan ini men-tag aku ATAU membalas pesanku
   "file_name TEXT DEFAULT ''", // nama berkas (utk pesan dokumen / arsip)
   "file_size INTEGER DEFAULT 0", // ukuran berkas (byte) utk pesan dokumen
+  "edited INTEGER DEFAULT 0", // 1 bila pesan ini sudah diedit
 ]) {
   try { db.exec(`ALTER TABLE messages ADD COLUMN ${col}`); } catch (e) { /* sudah ada */ }
 }
@@ -139,7 +140,7 @@ const _getMessages = db.prepare(`
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
          m.quoted_id, m.quoted_text, m.quoted_sender,
          COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
-         m.media_mime, m.file_name, m.file_size
+         m.media_mime, m.file_name, m.file_size, m.edited
   FROM messages m
   LEFT JOIN contacts ct ON ct.jid = m.sender
   LEFT JOIN contacts qc ON qc.jid = m.quoted_sender
@@ -271,6 +272,17 @@ function getMessageById(jid, id) {
   return _getMessageById.get({ jid, id });
 }
 
+// Ganti teks pesan (saat diedit) + tandai edited. Update preview chat bila pesan ini yang terbaru.
+const _editMsg = db.prepare("UPDATE messages SET text = @text, edited = 1 WHERE chat_jid = @jid AND id = @id");
+const _editChatLast = db.prepare(
+  "UPDATE chats SET last_text = @text WHERE jid = @jid AND last_message_time = (SELECT timestamp FROM messages WHERE chat_jid = @jid AND id = @id)"
+);
+function editMessageText(jid, id, text) {
+  if (!jid || !id) return;
+  _editMsg.run({ jid, id, text: text || "" });
+  try { _editChatLast.run({ jid, id, text: text || "" }); } catch (e) { /* abaikan */ }
+}
+
 function getMessageRaw(jid, id) {
   const row = _getMessageRaw.get({ jid, id });
   return row ? row.raw : "";
@@ -331,6 +343,7 @@ module.exports = {
   getMessages,
   getMediaInfo,
   getMessageById,
+  editMessageText,
   getMessageRaw,
   getChatName,
   getContactName,
