@@ -1523,3 +1523,14 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+
+// Deteksi keyboard muncul (visualViewport menyusut) → tandai .kb-open di <html> supaya
+// gap safe-area di bawah compose dihilangkan (mobile). Tak ada efek di desktop.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const onVV = () => {
+    const kbOpen = (window.innerHeight - vv.height) > 150; // ambang tinggi keyboard
+    document.documentElement.classList.toggle("kb-open", kbOpen);
+  };
+  vv.addEventListener("resize", onVV);
+}
