@@ -1530,23 +1530,29 @@ if ("serviceWorker" in navigator) {
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
-  // DEBUG sementara (hapus nanti): tampilkan angka viewport biar bisa diagnosa di HP.
+  // DEBUG sementara (hapus nanti).
   const dbg = document.createElement("div");
-  dbg.style.cssText = "position:fixed;bottom:2px;left:2px;z-index:99999;background:rgba(0,0,0,.82);color:#0f0;font:11px monospace;padding:3px 6px;border-radius:5px;pointer-events:none;white-space:pre";
+  dbg.style.cssText = "position:fixed;left:2px;z-index:99999;background:rgba(0,0,0,.82);color:#0f0;font:11px monospace;padding:3px 6px;border-radius:5px;pointer-events:none;white-space:pre";
   document.body.appendChild(dbg);
+  let maxVH = 0;
   const onVV = () => {
-    const kbOpen = (window.innerHeight - vv.height) > 150; // ambang tinggi keyboard
+    maxVH = Math.max(maxVH, vv.height);
+    // Keyboard terdeteksi via offsetTop melonjak (device ini) ATAU height menyusut (device lain).
+    const kbOpen = vv.offsetTop > 50 || (maxVH - vv.height) > 120;
     document.documentElement.classList.toggle("kb-open", kbOpen);
     if (kbOpen) {
+      // pin .app tepat ke area terlihat → compose nempel di atas keyboard, tanpa gap
+      app.style.position = "fixed";
+      app.style.left = vv.offsetLeft + "px";
+      app.style.top = vv.offsetTop + "px";
+      app.style.width = vv.width + "px";
       app.style.height = vv.height + "px";
-      app.style.transform = "translateY(" + vv.offsetTop + "px)"; // kompensasi geseran scroll iOS
     } else {
-      app.style.height = ""; app.style.transform = "";
+      app.style.position = ""; app.style.left = ""; app.style.top = ""; app.style.width = ""; app.style.height = "";
     }
-    const kbH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop); // tinggi keyboard
-    dbg.style.bottom = (kbH + 4) + "px";   // ngambang di atas keyboard biar tetap kebaca
+    dbg.style.top = (vv.offsetTop + vv.height - 26) + "px";   // pojok kiri-bawah area terlihat
     dbg.textContent = "ih:" + window.innerHeight + " vvh:" + Math.round(vv.height)
-      + " vot:" + Math.round(vv.offsetTop) + " kb:" + kbOpen + " ah:" + (app.style.height || "-");
+      + " vot:" + Math.round(vv.offsetTop) + " kb:" + kbOpen;
   };
   vv.addEventListener("resize", onVV);
   vv.addEventListener("scroll", onVV);
