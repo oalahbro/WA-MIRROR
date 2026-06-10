@@ -505,6 +505,39 @@ function backToList() {
 }
 $("backBtn").onclick = backToList;
 
+// Gestur swipe dari TEPI KIRI → kembali ke daftar chat (ala WA/iOS). Hanya mobile + chat terbuka.
+// Panel chat mengikuti jari; lepas melewati ambang → kembali, kurang → snap balik.
+(function setupEdgeSwipeBack() {
+  const conv = document.querySelector(".conversation");
+  if (!conv) return;
+  let active = false, startX = 0, startY = 0, dx = 0;
+  const mobile = () => window.innerWidth <= 768;
+  const reset = () => { conv.style.transition = ""; conv.style.transform = ""; active = false; dx = 0; };
+
+  document.addEventListener("touchstart", (e) => {
+    if (!mobile() || !$("app").classList.contains("chat-open")) return;
+    const t = e.touches[0];
+    if (t.clientX > 28) return;          // harus mulai dari tepi kiri
+    active = true; startX = t.clientX; startY = t.clientY; dx = 0;
+    conv.style.transition = "none";
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!active) return;
+    const t = e.touches[0];
+    const mx = t.clientX - startX, my = t.clientY - startY;
+    if (Math.abs(my) > Math.abs(mx) && Math.abs(my) > 12) { reset(); return; } // gerak vertikal → batal (scroll jalan)
+    if (mx > 0) { dx = mx; e.preventDefault(); conv.style.transform = "translateX(" + mx + "px)"; }
+  }, { passive: false });
+
+  document.addEventListener("touchend", () => {
+    if (!active) return;
+    const moved = dx;
+    reset();
+    if (moved > Math.min(90, window.innerWidth * 0.28)) backToList();
+  });
+})();
+
 // msgs datang DESC (terbaru dulu). Render dibalik jadi ASC (lama -> baru ke bawah).
 function renderMessages(msgs, prepend) {
   if (!msgs.length) return;
