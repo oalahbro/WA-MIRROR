@@ -17,7 +17,6 @@ let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
 let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
 let msgSearchMode = false;   // true saat menampilkan hasil cari ISI pesan
 let msgSearchQuery = "";
-let chatLongPressed = false; // true sesaat setelah long-press chat (munculin tombol pin di mobile)
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -271,10 +270,7 @@ function buildChatItem(c) {
   el.dataset.jid = c.jid;
   el.innerHTML = `<span class="avatar"><span class="avatar-initials" style="background:${avatarColor(c.jid)}"></span><img class="avatar-img" alt=""></span><div class="chat-main"><div class="row"><span class="name"></span><span class="time"></span></div><div class="row2"><span class="preview"></span><span class="mention hidden" title="Kamu di-tag / dibalas">@</span><span class="badge hidden"></span></div></div><button class="pin-btn" title="">📌</button>`;
   el.querySelector(".avatar-img").src = avatarUrl(c.jid);   // dimuat sekali; load/error via capture
-  el.addEventListener("click", () => {
-    if (chatLongPressed) return;   // baru long-press (munculin pin) → jangan buka chat
-    openChat(el.dataset.jid, el.querySelector(".name").textContent);
-  });
+  el.addEventListener("click", () => openChat(el.dataset.jid, el.querySelector(".name").textContent));
   el.querySelector(".pin-btn").addEventListener("click", (e) => { e.stopPropagation(); togglePin(el.dataset.jid); });
   updateChatItem(el, c);
   return el;
@@ -455,24 +451,25 @@ wireAvatarLoaders($("convAvatar"));
 
 // Long-press chat (mobile) → munculkan tombol pin pada chat itu (tanpa membuka chat).
 // Tombol pin chat belum-dipin disembunyikan default (CSS), baru tampak via class .reveal-pin.
-let lpChatTimer = null, pinRevealTimer = null;
+let lpChatTimer = null, pinRevealTimer = null, lpChatFired = false;
 function revealPin(item) {
   document.querySelectorAll(".chat-item.reveal-pin").forEach((el) => { if (el !== item) el.classList.remove("reveal-pin"); });
   item.classList.add("reveal-pin");
   clearTimeout(pinRevealTimer);
   pinRevealTimer = setTimeout(() => item.classList.remove("reveal-pin"), 3500);
 }
+const cancelChatLp = () => { if (lpChatTimer) { clearTimeout(lpChatTimer); lpChatTimer = null; } };
 $("chatList").addEventListener("touchstart", (e) => {
   const item = e.target.closest(".chat-item");
   if (!item) return;
-  lpChatTimer = setTimeout(() => {
-    chatLongPressed = true;
-    setTimeout(() => { chatLongPressed = false; }, 700); // auto-reset (klik setelah long-press di-skip)
-    revealPin(item);
-  }, 450);
+  lpChatFired = false;
+  lpChatTimer = setTimeout(() => { lpChatFired = true; revealPin(item); }, 450);
 }, { passive: true });
-const cancelChatLp = () => { if (lpChatTimer) { clearTimeout(lpChatTimer); lpChatTimer = null; } };
-$("chatList").addEventListener("touchend", cancelChatLp);
+$("chatList").addEventListener("touchend", (e) => {
+  cancelChatLp();
+  // Long-press tadi terpicu → cegah klik-sintetis biar chat TIDAK ikut kebuka (tanpa dobel-tap).
+  if (lpChatFired) { e.preventDefault(); lpChatFired = false; }
+}, { passive: false });
 $("chatList").addEventListener("touchmove", cancelChatLp);
 
 // ---------- conversation ----------
