@@ -1363,8 +1363,9 @@ const ACCENTS = {
   blue:   { base: "#2f80ed", light: "#1c63c9", dark: "#53bdeb", bubble: "#d7e9ff" },
   purple: { base: "#7b5cff", light: "#5b3fd6", dark: "#b9a3ff", bubble: "#e9e1ff" },
   orange: { base: "#f0900c", light: "#c9760a", dark: "#f6a93b", bubble: "#ffe7c7" },
-  rose:   { base: "#e0526a", light: "#c23a55", dark: "#ff8fa0", bubble: "#ffe1e7" },
+  rose:   { base: "#ff4f8b", light: "#d62e6a", dark: "#ff8fbb", bubble: "#ffe2ef" },
   teal:   { base: "#0d9488", light: "#0b7268", dark: "#2dd4bf", bubble: "#cdeee9" },
+  maroon: { base: "#9b2335", light: "#7a1c2a", dark: "#cf6e7c", bubble: "#f1d6db" },
 };
 let curTheme = "light";
 let curAccent = localStorage.getItem("wa_accent") || ""; // "" = ikut bawaan tema
