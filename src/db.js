@@ -163,6 +163,21 @@ const _getMessageRaw = db.prepare(
 const _getChatName = db.prepare(`SELECT name FROM chats WHERE jid = @jid`);
 const _getContactName = db.prepare(`SELECT name FROM contacts WHERE jid = @jid`);
 
+// Cari nama kontak dari BAGIAN NOMOR jid (cocok utk @s.whatsapp.net maupun @lid,
+// dengan/ tanpa suffix device). Prefix match → bisa pakai indeks primary key jid.
+const _contactByNum = db.prepare(
+  `SELECT name FROM contacts WHERE (jid LIKE @p1 OR jid LIKE @p2) AND name <> '' LIMIT 1`
+);
+// Ganti mention "@<nomor/id>" pada teks → "@<nama kontak>" (best-effort). WA menyimpan
+// mention sebagai @nomor; nama hanya dirender klien. Hanya digit ≥5 yang dianggap mention.
+function resolveMentions(text) {
+  if (!text || text.indexOf("@") < 0) return text;
+  return text.replace(/@(\d{5,})/g, (full, num) => {
+    const r = _contactByNum.get({ p1: num + "@%", p2: num + ":%" });
+    return r && r.name ? "@" + r.name : full;
+  });
+}
+
 // Cari ISI pesan (teks) lintas semua chat. LIKE %q% (tanpa indeks → full scan, tapi
 // cukup cepat utk skala personal). Sertakan nama chat + nama pengirim utk ditampilkan.
 const _searchMessages = db.prepare(`
@@ -220,7 +235,9 @@ function upsertContact(jid, name) {
 }
 
 function getChats(limit = 200) {
-  return _getChats.all({ limit });
+  const rows = _getChats.all({ limit });
+  for (const r of rows) if (r.last_text) r.last_text = resolveMentions(r.last_text);
+  return rows;
 }
 
 function setPin(jid, pinned) {
@@ -234,11 +251,16 @@ function markRead(jid) {
 }
 
 function getMessages(jid, before, limit = 50) {
-  return _getMessages.all({
+  const rows = _getMessages.all({
     jid,
     before: before && before > 0 ? before : Number.MAX_SAFE_INTEGER,
     limit,
   });
+  for (const r of rows) {
+    if (r.text) r.text = resolveMentions(r.text);
+    if (r.quoted_text) r.quoted_text = resolveMentions(r.quoted_text);
+  }
+  return rows;
 }
 
 function getMediaInfo(jid, id) {
