@@ -586,6 +586,26 @@ async function resolveLidToPn(jid) {
   } catch (e) { return ""; }
 }
 
+// Normalisasi nomor: ambil digit, awalan "0" → "62" (default Indonesia).
+function normNum(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.startsWith("0")) d = "62" + d.slice(1);
+  return d;
+}
+// Cek apakah nomor terdaftar di WhatsApp + ambil jid kanoniknya (untuk "chat baru").
+// Return { exists, jid } atau { exists:false }.
+async function checkNumber(num) {
+  if (!sock || !status.connected) return { exists: false, error: "WhatsApp belum terhubung" };
+  const d = normNum(num);
+  if (d.length < 7) return { exists: false };
+  try {
+    const res = await sock.onWhatsApp(d);
+    const hit = Array.isArray(res) ? res.find((r) => r && r.exists) : null;
+    if (hit) return { exists: true, jid: jidNormalizedUser(hit.jid) };
+    return { exists: false };
+  } catch (e) { return { exists: false, error: e.message }; }
+}
+
 // URL foto profil sebuah jid (kontak/grup). "preview" = thumbnail kecil (ringan, cukup
 // untuk avatar di list); null bila tak ada foto / privasi / belum siap. Tak melempar.
 async function getAvatarUrl(jid, kind) {
@@ -611,7 +631,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, resolveLidToPn, getStatus };
+module.exports = { start, sendMessage, sendMedia, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

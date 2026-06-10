@@ -142,6 +142,23 @@ body {
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 12px 14px;
 }
+/* popover "chat baru" */
+.newchat-popover {
+  position: absolute; top: 46px; left: 12px; right: 12px; z-index: 30;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 12px 14px;
+}
+.newchat-popover input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--input); color: var(--text); font-size: 14px; outline: none; margin-bottom: 8px;
+}
+.newchat-popover #newChatGo {
+  width: 100%; padding: 9px; border: none; border-radius: 8px; background: var(--green); color: #fff;
+  font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.newchat-popover #newChatGo:hover { background: var(--green-dark); }
+.nc-err { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 14px; }
+
 .theme-title { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
 .theme-opts { display: flex; gap: 8px; flex-wrap: wrap; }
 .theme-opt {

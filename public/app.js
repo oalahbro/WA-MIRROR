@@ -1232,7 +1232,7 @@ function applyTheme(name) {
   applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
 }
 
-$("themeBtn").onclick = (e) => { e.stopPropagation(); $("themePopover").classList.toggle("hidden"); };
+$("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
 document.querySelectorAll(".theme-opt").forEach((o) => {
   o.onclick = () => { applyTheme(o.dataset.theme); }; // popover tetap terbuka biar bisa atur aksen
 });
@@ -1243,6 +1243,42 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");
 });
 applyTheme(localStorage.getItem("wa_theme") || "light");
+
+// ---------- chat baru ke nomor manual ----------
+function setNewChatErr(msg) { $("newChatErr").textContent = msg || ""; }
+async function startNewChat() {
+  const raw = $("newChatNum").value.trim();
+  if (!raw) return;
+  setNewChatErr("");
+  setBtnLoading($("newChatGo"), true);
+  try {
+    const r = await api(`/api/check-number?num=${encodeURIComponent(raw)}`);
+    if (r && r.exists && r.jid) {
+      $("newChatPopover").classList.add("hidden");
+      $("newChatNum").value = "";
+      const existing = allChats.find((c) => c.jid === r.jid);
+      openChat(r.jid, existing ? existing.name : r.jid.split("@")[0]);
+    } else {
+      setNewChatErr(r && r.error ? r.error : "Nomor tidak terdaftar di WhatsApp.");
+    }
+  } catch (e) {
+    setNewChatErr("Gagal memeriksa nomor.");
+  } finally {
+    setBtnLoading($("newChatGo"), false);
+  }
+}
+$("newChatBtn").onclick = (e) => {
+  e.stopPropagation();
+  $("themePopover").classList.add("hidden");
+  const willOpen = $("newChatPopover").classList.contains("hidden");
+  $("newChatPopover").classList.toggle("hidden");
+  if (willOpen) { setNewChatErr(""); $("newChatNum").focus(); }
+};
+$("newChatGo").onclick = startNewChat;
+$("newChatNum").addEventListener("keydown", (e) => { if (e.key === "Enter") startNewChat(); });
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#newChatPopover") && !e.target.closest("#newChatBtn")) $("newChatPopover").classList.add("hidden");
+});
 // Pulihkan tab filter terakhir yang dipilih.
 document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
 

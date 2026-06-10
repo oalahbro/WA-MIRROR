@@ -46,7 +46,14 @@
           <div id="statusPill" class="status-pill connecting">
             <span class="dot"></span><span id="statusText">Menghubungkan…</span>
           </div>
+          <button id="newChatBtn" class="icon-btn" title="Chat baru">✏️</button>
           <button id="themeBtn" class="icon-btn" title="Tema warna">🎨</button>
+        </div>
+        <div id="newChatPopover" class="newchat-popover hidden">
+          <div class="theme-title">Chat baru ke nomor</div>
+          <input id="newChatNum" type="tel" inputmode="numeric" placeholder="mis. 0812… atau 62812…" autocomplete="off" />
+          <button id="newChatGo"><span class="btn-label">Mulai chat</span><span class="btn-spin hidden"></span></button>
+          <div id="newChatErr" class="nc-err"></div>
         </div>
         <div id="themePopover" class="theme-popover hidden">
           <div class="theme-title">Tema</div>

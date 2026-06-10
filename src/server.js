@@ -153,6 +153,14 @@ app.get("/api/search", requireAuth, (req, res) => {
   res.json(store.searchMessages(q, limit));
 });
 
+// Cek nomor terdaftar di WhatsApp (untuk "chat baru"). ?num=628xxx → { exists, jid }.
+app.get("/api/check-number", requireAuth, async (req, res) => {
+  const num = req.query.num;
+  if (!num) return res.status(400).json({ error: "num wajib" });
+  try { res.json(await wa.checkNumber(num)); }
+  catch (e) { res.json({ exists: false, error: e.message }); }
+});
+
 // Resolve jid @lid (anggota grup) → nomor asli @s.whatsapp.net. { jid: "" } bila tak ada mapping.
 app.get("/api/resolve-jid", requireAuth, async (req, res) => {
   const jid = req.query.jid;
