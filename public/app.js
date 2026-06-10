@@ -756,18 +756,19 @@ function renderBubble(m) {
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
   return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
-    <button class="reply-btn" title="Balas">↩</button>
+    <button class="menu-btn" title="Menu pesan">⋮</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
     <div class="meta">${fmtTime(m.timestamp)}</div>
   </div>`;
 }
 
-// Event delegation untuk pesan: tombol balas, klik kutipan, klik media.
+// Event delegation untuk pesan: tombol menu (⋮), klik kutipan, klik media.
 $("messages").addEventListener("click", (e) => {
-  const rbtn = e.target.closest(".reply-btn");
-  if (rbtn) {
-    const b = rbtn.closest(".bubble");
-    if (b) startReply(b.dataset.id, b.dataset.rsender, b.dataset.rtext);
+  const mbtn = e.target.closest(".menu-btn");
+  if (mbtn) {
+    e.stopPropagation();
+    const b = mbtn.closest(".bubble");
+    if (b) { const r = mbtn.getBoundingClientRect(); openMsgMenu(b, r.left, r.bottom + 2); }
     return;
   }
   const q = e.target.closest(".quoted[data-qid]");
@@ -871,6 +872,37 @@ $("messages").addEventListener("touchmove", cancelLp);
 document.addEventListener("click", (e) => { if (!e.target.closest("#msgMenu")) closeMsgMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMsgMenu(); });
 $("messages").addEventListener("scroll", closeMsgMenu);
+
+// Swipe bubble ke KANAN → balas cepat (mobile). Bubble ikut jari; lepas lewat ambang → reply.
+let swEl = null, swX = 0, swY = 0, swDx = 0, swActive = false;
+$("messages").addEventListener("touchstart", (e) => {
+  if (window.innerWidth > 768 || e.touches.length > 1) return;
+  const t = e.touches[0];
+  if (t.clientX <= 30) return;                 // sisakan tepi kiri utk gestur "kembali"
+  const b = e.target.closest(".bubble");
+  if (!b) return;
+  swEl = b; swX = t.clientX; swY = t.clientY; swDx = 0; swActive = false;
+}, { passive: true });
+$("messages").addEventListener("touchmove", (e) => {
+  if (!swEl) return;
+  const t = e.touches[0];
+  const dx = t.clientX - swX, dy = t.clientY - swY;
+  if (!swActive) {
+    if (Math.abs(dy) > Math.abs(dx)) { swEl = null; return; } // vertikal → biarkan scroll
+    if (dx < 8) return;
+    swActive = true; swEl.style.transition = "none";
+  }
+  if (dx > 0) { swDx = Math.min(dx, 96); e.preventDefault(); swEl.style.transform = "translateX(" + swDx + "px)"; }
+}, { passive: false });
+function endSwipeReply() {
+  if (!swEl) return;
+  const el = swEl, dx = swDx;
+  el.style.transition = ""; el.style.transform = "";
+  swEl = null; swDx = 0; swActive = false;
+  if (dx > 55) startReply(el.dataset.id, el.dataset.rsender, el.dataset.rtext);
+}
+$("messages").addEventListener("touchend", endSwipeReply);
+$("messages").addEventListener("touchcancel", endSwipeReply);
 
 // ---------- reply (balas/kutip) ----------
 // srcJid: jid chat ASAL pesan yg dikutip (dipakai saat "balas pribadi" — pesan asli di grup,
@@ -1176,7 +1208,7 @@ async function sendTextMsg(text) {
   // samakan dgn renderBubble: pesan tanpa kutipan yg isinya hanya emoji / emoticon BBM → tampil besar tanpa bubble
   const bigCls = !quote ? (isEmojiOnly(text) ? " emoji-only" : isBbmOnly(text) ? " bbm-only" : "") : "";
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
   try {
@@ -1213,7 +1245,7 @@ async function sendMediaMsg(caption) {
   const capHTML = caption ? `<div class="body">${bbmify(linkify(escapeHtml(caption)))}</div>` : "";
   const rtext = caption || (kind === "image" ? "📷 Foto" : kind === "video" ? "🎥 Video" : "📄 " + file.name);
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(rtext)}" data-rsender="Kamu"><button class="reply-btn" title="Balas">↩</button>${quoteBlockHTML(quote)}${mediaHTML}${capHTML}<div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(rtext)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}${mediaHTML}${capHTML}<div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
 
@@ -1334,6 +1366,7 @@ $("newChatBtn").onclick = (e) => {
   if (willOpen) { setNewChatErr(""); $("newChatNum").focus(); }
 };
 $("newChatGo").onclick = startNewChat;
+$("newChatClose").onclick = () => { $("newChatPopover").classList.add("hidden"); setNewChatErr(""); };
 $("newChatNum").addEventListener("keydown", (e) => { if (e.key === "Enter") startNewChat(); });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#newChatPopover") && !e.target.closest("#newChatBtn")) $("newChatPopover").classList.add("hidden");
