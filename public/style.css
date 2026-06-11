@@ -153,7 +153,7 @@ body {
   min-width: 0; background: var(--panel);
   border-right: 1px solid var(--border); display: flex; flex-direction: column;
 }
-.sidebar-head { position: relative; background: var(--panel-2); padding: 10px 14px; }
+.sidebar-head { position: relative; background: var(--panel-2); padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; }
 .head-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .head-row .me { flex: 1; min-width: 0; }
 
@@ -380,7 +380,7 @@ body {
 }
 .empty-art { font-size: 56px; opacity: .35; }
 .conv-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.conv-head { display: flex; align-items: center; gap: 12px; background: var(--panel-2); padding: 14px 18px; border-left: 1px solid var(--border); }
+.conv-head { display: flex; align-items: center; gap: 12px; background: var(--panel-2); padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 14px; border-left: 1px solid var(--border); }
 .conv-title { font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .back-btn {
   display: none; flex-shrink: 0; width: 34px; height: 34px; border: none; border-radius: 50%;
