@@ -1595,11 +1595,23 @@ function startApp() {
   [80, 300, 700, 1400].forEach((t) => setTimeout(primeStatusBar, t));
 }
 
-if (TOKEN) {
-  fetch("/api/login?token=" + encodeURIComponent(TOKEN)).then((r) => r.json()).then((res) => {
-    if (res.ok) startApp(); else logout();
-  }).catch(() => {});
+// Auto-login saat boot. Pas PWA cold-start, fetch pertama sering gagal (jaringan/SW belum siap) →
+// dulu langsung nyerah & harus klik "Masuk" manual. Sekarang di-retry beberapa kali untuk error
+// jaringan; hanya kalau server benar-benar menolak token (res.ok=false) baru berhenti.
+function bootAutoLogin(attempt) {
+  if (!TOKEN) return;
+  fetch("/api/login?token=" + encodeURIComponent(TOKEN))
+    .then((r) => r.json())
+    .then((res) => {
+      if (res.ok) startApp();
+      else logout(); // token ditolak → tampilkan login (sudah terisi), retry tak akan menolong
+    })
+    .catch(() => {
+      if (attempt < 6) setTimeout(() => bootAutoLogin(attempt + 1), 500 + attempt * 400);
+      else logout(); // jaringan tetap gagal → biar user bisa tap Masuk manual
+    });
 }
+bootAutoLogin(0);
 
 // Daftarkan service worker (PWA: installable + launch lebih cepat). Hanya di konteks aman (https/localhost).
 if ("serviceWorker" in navigator) {
