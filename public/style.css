@@ -78,6 +78,11 @@
 :root[data-theme="bbm"] .conv-title,
 :root[data-theme="bbm"] .back-btn,
 :root[data-theme="bbm"] .stats-line { color: #fff; }
+/* BBM: bar compose (footer kolom ketik) juga #087099; tombol kirim dibedakan (putih) */
+:root[data-theme="bbm"] .compose { background: #087099; }
+:root[data-theme="bbm"] .send-btn { background: #fff; color: #087099; }
+:root[data-theme="bbm"] .send-btn:hover { background: #e8f3f8; }
+:root[data-theme="bbm"] .send-btn .btn-spin { border-color: rgba(8,112,153,.3); border-top-color: #087099; }
 html, body { height: 100%; overflow: hidden; }
 body {
   /* stack font ala WhatsApp Web (iOS→Helvetica Neue, Windows→Segoe UI, Android→Roboto) */
