@@ -87,8 +87,6 @@ html, body { height: 100%; overflow: hidden; }
 body {
   /* stack font ala WhatsApp Web (iOS→Helvetica Neue, Windows→Segoe UI, Android→Roboto) */
   font-family: "Segoe UI", "Helvetica Neue", Helvetica, Roboto, "Lucida Grande", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   background: var(--panel-2);
   color: var(--text);
