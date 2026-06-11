@@ -1602,6 +1602,18 @@ if (TOKEN) {
   }).catch(() => {});
 }
 
+// Boot splash biru: biarkan tampil sebentar (memberi iOS waktu men-sample warna status bar),
+// lalu fade-out. ~900ms terasa seperti loading wajar; bisa diturunkan kalau berhasil.
+(function hideBootSplashLater() {
+  const sp = $("bootSplash");
+  if (!sp) return;
+  const hide = () => {
+    sp.classList.add("hide");
+    setTimeout(() => sp.remove(), 400); // buang setelah transisi
+  };
+  setTimeout(hide, 900);
+})();
+
 // Daftarkan service worker (PWA: installable + launch lebih cepat). Hanya di konteks aman (https/localhost).
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
