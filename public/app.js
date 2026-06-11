@@ -1650,3 +1650,27 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", onVV);
   onVV();
 }
+
+// ===== DEBUG gap bawah (sementara) =====
+(function dbgGap() {
+  try {
+    const pB = document.createElement("div");
+    pB.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-bottom,0px);width:0;pointer-events:none;";
+    document.body.appendChild(pB);
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;left:4px;bottom:60px;z-index:100000;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.45 monospace;padding:4px 7px;border-radius:5px;pointer-events:none;white-space:pre";
+    document.body.appendChild(d);
+    function upd() {
+      const app = $("app");
+      const cmp = document.querySelector(".compose");
+      const sb = $("sidebar") || document.querySelector(".sidebar");
+      d.textContent =
+        "innerH:" + window.innerHeight + " sab:" + pB.offsetHeight + "\n" +
+        "htmlH:" + document.documentElement.clientHeight + " appH:" + (app ? app.offsetHeight : "?") + "\n" +
+        "htmlBg:" + getComputedStyle(document.documentElement).backgroundColor + "\n" +
+        "composeBg:" + (cmp ? getComputedStyle(cmp).backgroundColor : "?");
+    }
+    upd(); setTimeout(upd, 1200); window.addEventListener("resize", upd);
+    setInterval(upd, 1500);
+  } catch (e) {}
+})();
