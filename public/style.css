@@ -55,6 +55,8 @@
   /* gaya bubble: kotak klasik BBM, flat + garis tepi */
   --bubble-radius: 3px; --bubble-tail: 3px; --bubble-pad: 6px 10px 5px;
   --bubble-shadow: none; --bubble-border: 1px solid var(--border);
+  /* warnai kanvas dokumen → area status bar iOS standalone ikut biru (tanpa black-translucent/gap) */
+  background: #087099;
 }
 /* BBM: bubble lawan terang (#D8D8D8) → teks & elemen di dalamnya dibuat gelap biar terbaca */
 :root[data-theme="bbm"] .bubble.other { color: #15171a; }
