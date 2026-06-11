@@ -105,7 +105,6 @@ function logout() {
   $("app").classList.add("hidden");
   $("qrOverlay").classList.add("hidden");
   $("login").classList.remove("hidden");
-  setBottomBg();   // bottom = bg login
 }
 
 // ---------- status / QR / sync ----------
@@ -491,7 +490,6 @@ async function openChat(jid, title) {
   activeJid = jid;
   oldestLoaded = 0;
   $("app").classList.add("chat-open");   // mobile: geser ke tampilan percakapan
-  setBottomBg();                          // bottom = compose
   $("convEmpty").classList.add("hidden");
   $("convView").classList.remove("hidden");
   $("convTitle").textContent = title;
@@ -537,7 +535,6 @@ async function openChat(jid, title) {
 // Mobile: kembali ke daftar chat
 function backToList() {
   $("app").classList.remove("chat-open");
-  setBottomBg();             // bottom = sidebar
   clearInterval(msgPollTimer);
   activeJid = null;          // lepas active → badge unread jalan normal lagi
   renderChats();
@@ -1390,40 +1387,12 @@ function applyAccent() {
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
 }
 
-// Selaraskan warna system UI (status bar iOS / address bar Android) dgn warna header tema aktif.
-function syncThemeColor() {
-  const head = document.querySelector(".sidebar-head");
-  if (!head) return;
-  const c = getComputedStyle(head).backgroundColor;
-  if (!c || c === "rgba(0, 0, 0, 0)" || c === "transparent") return;
-  let meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) { meta = document.createElement("meta"); meta.setAttribute("name", "theme-color"); document.head.appendChild(meta); }
-  meta.setAttribute("content", c);
-}
-
-// Area home-indicator (34px paling bawah) tak bisa ditutup fixed element di iOS standalone →
-// yang nongol = background <html>. Samakan dgn elemen paling bawah tampilan aktif biar mulus:
-// login → bg login, chat (mobile) → compose, list → sidebar.
-function setBottomBg() {
-  const app = $("app");
-  let sel;
-  if (!app || app.classList.contains("hidden")) sel = ".login";
-  else if (app.classList.contains("chat-open")) sel = ".compose";
-  else sel = ".sidebar";
-  const el = document.querySelector(sel);
-  if (!el) return;
-  const c = getComputedStyle(el).backgroundColor;
-  if (c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent") document.documentElement.style.backgroundColor = c;
-}
-
 function applyTheme(name) {
   curTheme = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
   document.documentElement.setAttribute("data-theme", curTheme);
   localStorage.setItem("wa_theme", curTheme);
   document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === curTheme));
   applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
-  syncThemeColor();
-  setBottomBg();
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
@@ -1598,8 +1567,6 @@ document.addEventListener("click", (e) => {
 function startApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
-  syncThemeColor();   // header kini terlihat → set ulang theme-color
-  setBottomBg();
   showChatSkeleton();
   setPill("connecting", "Menghubungkan…");
   checkStatus();
@@ -1624,14 +1591,6 @@ if ("serviceWorker" in navigator) {
 // iOS: 100dvh TIDAK menyusut saat keyboard muncul → .app tetap setinggi layar penuh &
 // compose kedorong di belakang keyboard (muncul "space tebal"). Fix: kecilkan tinggi .app
 // ke tinggi visualViewport saat keyboard naik → compose nempel pas di atas keyboard.
-// Set tinggi app/login = window.innerHeight (layar fisik penuh). Di iOS standalone,
-// 100dvh/fixed-inset kadang cuma seukuran safe-area → sisakan strip home-indicator;
-// innerHeight justru penuh, jadi pakai itu.
-function setAppH() { document.documentElement.style.setProperty("--app-h", window.innerHeight + "px"); }
-setAppH();
-window.addEventListener("resize", setAppH);
-window.addEventListener("orientationchange", () => setTimeout(setAppH, 200));
-
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
@@ -1656,32 +1615,3 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", onVV);
   onVV();
 }
-
-// ===== DEBUG status bar iOS (sementara — hapus setelah selesai) =====
-(function dbgStatusBar() {
-  try {
-    const probe = document.createElement("div");
-    probe.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-top,0px);width:0;pointer-events:none;";
-    document.body.appendChild(probe);
-    const probeB = document.createElement("div");
-    probeB.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-bottom,0px);width:0;pointer-events:none;";
-    document.body.appendChild(probeB);
-    const d = document.createElement("div");
-    d.style.cssText = "position:fixed;top:96px;left:6px;z-index:100000;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;padding:4px 7px;border-radius:5px;pointer-events:none;white-space:pre";
-    document.body.appendChild(d);
-    function upd() {
-      const sa = ("standalone" in navigator) ? navigator.standalone : "n/a";
-      const dm = matchMedia("(display-mode: standalone)").matches;
-      const head = document.querySelector(".sidebar-head");
-      const cs = head ? getComputedStyle(head) : null;
-      const tcEl = document.querySelector('meta[name="theme-color"]');
-      d.textContent =
-        "standalone:" + sa + "  dmode:" + dm + "\n" +
-        "safe-area-top:" + probe.offsetHeight + " bottom:" + probeB.offsetHeight + "\n" +
-        "innerH:" + window.innerHeight + " appH:" + (($("app") || {}).offsetHeight || "?") + "\n" +
-        "head-padTop:" + (cs ? cs.paddingTop : "?") + "  bg:" + (cs ? cs.backgroundColor : "?") + "\n" +
-        "themeColor:" + (tcEl ? tcEl.getAttribute("content") : "(none)");
-    }
-    upd(); setTimeout(upd, 1000); window.addEventListener("resize", upd);
-  } catch (e) {}
-})();
