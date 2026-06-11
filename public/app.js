@@ -1615,3 +1615,21 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", onVV);
   onVV();
 }
+
+// iOS standalone PWA: status bar baru "ngambil" warna header (biru) setelah ada reflow layout —
+// makanya warnanya baru muncul setelah keyboard dibuka. Pancing reflow singkat saat load biar
+// status bar langsung sesuai tema tanpa harus klik kolom cari dulu. (Tanpa efek visual.)
+function primeStatusBar() {
+  const app = $("app");
+  if (!app) return;
+  app.style.transform = "translateY(0.1px)";
+  void app.offsetHeight;                       // paksa layout dihitung ulang
+  requestAnimationFrame(() => {
+    app.style.transform = "";
+    void app.offsetHeight;
+  });
+}
+window.addEventListener("load", () => {
+  // beberapa kali sebab cold-start PWA paint-nya telat
+  [120, 400, 900].forEach((t) => setTimeout(primeStatusBar, t));
+});
