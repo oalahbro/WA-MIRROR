@@ -3,7 +3,7 @@
    - aset statis (ikon, gambar BBM) → cache-first
    - /api/* → TIDAK PERNAH di-cache (data pribadi)
    Naikkan versi CACHE saat mau paksa bersih-bersih cache lama. */
-const CACHE = "wa-mirror-v1";
+const CACHE = "wa-mirror-v2";
 const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/favicon.svg", "/manifest.json", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
