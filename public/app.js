@@ -1622,14 +1622,21 @@ if (window.visualViewport) {
 function primeStatusBar() {
   const app = $("app");
   if (!app) return;
-  app.style.transform = "translateY(0.1px)";
+  const vv = window.visualViewport;
+  const w = (vv ? vv.width : window.innerWidth) + "px";
+  const h = (vv ? vv.height : window.innerHeight) + "px";
+  // niru state keyboard (lihat onVV): .app jadi fixed full-screen → iOS re-sample warna status bar
+  app.style.position = "fixed";
+  app.style.left = "0px"; app.style.top = "0px";
+  app.style.width = w; app.style.height = h;
   void app.offsetHeight;                       // paksa layout dihitung ulang
   requestAnimationFrame(() => {
-    app.style.transform = "";
+    app.style.position = ""; app.style.left = ""; app.style.top = "";
+    app.style.width = ""; app.style.height = "";
     void app.offsetHeight;
   });
 }
 window.addEventListener("load", () => {
   // beberapa kali sebab cold-start PWA paint-nya telat
-  [120, 400, 900].forEach((t) => setTimeout(primeStatusBar, t));
+  [120, 400, 900, 1600].forEach((t) => setTimeout(primeStatusBar, t));
 });
