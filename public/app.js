@@ -1396,6 +1396,8 @@ function syncThemeColor() {
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) { meta = document.createElement("meta"); meta.setAttribute("name", "theme-color"); document.head.appendChild(meta); }
   meta.setAttribute("content", c);
+  // background <html> = warna header → area home-indicator (yg tak ke-cover) ikut warna ini, bukan putih
+  document.documentElement.style.backgroundColor = c;
 }
 
 function applyTheme(name) {
@@ -1579,6 +1581,7 @@ document.addEventListener("click", (e) => {
 function startApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
+  syncThemeColor();   // header kini terlihat → set ulang theme-color & bg html
   showChatSkeleton();
   setPill("connecting", "Menghubungkan…");
   checkStatus();
