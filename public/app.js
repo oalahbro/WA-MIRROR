@@ -1,20 +1,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-
-// Token persist: localStorage SERING di-evict iOS PWA saat app ditutup → simpan cadangan di cookie
-// (lebih awet di standalone). Baca dari mana pun yang masih ada, lalu sinkronkan dua-duanya.
-function setCookie(name, val, days) {
-  document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=${days * 86400}; SameSite=Lax`;
-}
-function getCookie(name) {
-  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
-  return m ? decodeURIComponent(m[1]) : "";
-}
-function saveToken(t) { localStorage.setItem("wa_token", t); setCookie("wa_token", t, 365); }
-
-let TOKEN = localStorage.getItem("wa_token") || getCookie("wa_token") || "";
-if (TOKEN) saveToken(TOKEN); // pulihkan ke dua tempat kalau salah satu sempat hilang
+let TOKEN = localStorage.getItem("wa_token") || "";
 let activeJid = null;
 let oldestLoaded = 0;     // timestamp pesan tertua yang sudah dimuat (cursor)
 let allChats = [];
@@ -82,7 +69,6 @@ function toast(msg, kind = "", ms = 3000) {
 // ---------- login ----------
 $("loginBtn").onclick = doLogin;
 $("tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
-if (TOKEN) $("tokenInput").value = TOKEN; // prefill saat layar login tampil (mis. server lagi down)
 
 function setBtnLoading(btn, loading) {
   btn.disabled = loading;
@@ -99,7 +85,7 @@ async function doLogin() {
     const res = await fetch("/api/login?token=" + encodeURIComponent(t)).then((r) => r.json());
     if (res.ok) {
       TOKEN = t;
-      saveToken(t);
+      localStorage.setItem("wa_token", t);
       startApp();
     } else {
       $("loginErr").textContent = "Token salah.";
@@ -110,17 +96,15 @@ async function doLogin() {
     setBtnLoading($("loginBtn"), false);
   }
 }
-// Sesi berakhir / token ditolak → tampilkan layar login, TAPI jangan hapus token tersimpan.
-// Token di-prefill biar cukup 1x tap "Masuk" (bukan ketik ulang). Token hanya berubah kalau
-// user memang memasukkan yang baru. Ini mencegah re-input gara-gara 401/eviction sesaat.
 function logout() {
+  localStorage.removeItem("wa_token");
+  TOKEN = "";
   clearInterval(chatPollTimer); clearInterval(msgPollTimer);
   chatsLoadedOnce = false;
   lastConnState = "";
   $("app").classList.add("hidden");
   $("qrOverlay").classList.add("hidden");
   $("login").classList.remove("hidden");
-  if (TOKEN) $("tokenInput").value = TOKEN; // prefill → tinggal tap Masuk
 }
 
 // ---------- status / QR / sync ----------
@@ -1401,8 +1385,6 @@ function applyAccent() {
   }
   document.querySelectorAll(".accent-swatches .swatch").forEach((s) =>
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
-  // header ganti warna → paksa status bar iOS re-sample warna tema (tanpa harus close-buka app)
-  if (typeof primeStatusBar === "function") primeStatusBar();
 }
 
 function applyTheme(name) {
@@ -1591,27 +1573,13 @@ function startApp() {
   loadChats();
   clearInterval(chatPollTimer);
   chatPollTimer = setInterval(() => { checkStatus(); loadChats(); }, 4000);
-  // app baru kelihatan (sebelumnya .hidden) → pancing status bar iOS ambil warna header sekarang
-  [80, 300, 700, 1400].forEach((t) => setTimeout(primeStatusBar, t));
 }
 
-// Auto-login saat boot. Pas PWA cold-start, fetch pertama sering gagal (jaringan/SW belum siap) →
-// dulu langsung nyerah & harus klik "Masuk" manual. Sekarang di-retry beberapa kali untuk error
-// jaringan; hanya kalau server benar-benar menolak token (res.ok=false) baru berhenti.
-function bootAutoLogin(attempt) {
-  if (!TOKEN) return;
-  fetch("/api/login?token=" + encodeURIComponent(TOKEN))
-    .then((r) => r.json())
-    .then((res) => {
-      if (res.ok) startApp();
-      else logout(); // token ditolak → tampilkan login (sudah terisi), retry tak akan menolong
-    })
-    .catch(() => {
-      if (attempt < 6) setTimeout(() => bootAutoLogin(attempt + 1), 500 + attempt * 400);
-      else logout(); // jaringan tetap gagal → biar user bisa tap Masuk manual
-    });
+if (TOKEN) {
+  fetch("/api/login?token=" + encodeURIComponent(TOKEN)).then((r) => r.json()).then((res) => {
+    if (res.ok) startApp(); else logout();
+  }).catch(() => {});
 }
-bootAutoLogin(0);
 
 // Daftarkan service worker (PWA: installable + launch lebih cepat). Hanya di konteks aman (https/localhost).
 if ("serviceWorker" in navigator) {
@@ -1647,33 +1615,3 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", onVV);
   onVV();
 }
-
-// iOS standalone PWA: status bar baru "ngambil" warna header (biru) setelah ada reflow layout —
-// makanya warnanya baru muncul setelah keyboard dibuka. Pancing reflow singkat saat load biar
-// status bar langsung sesuai tema tanpa harus klik kolom cari dulu. (Tanpa efek visual.)
-let _primeBusy = false;
-function primeStatusBar() {
-  const app = $("app");
-  if (!app || _primeBusy || app.classList.contains("hidden")) return;
-  if (document.documentElement.classList.contains("kb-open")) return; // jgn ganggu saat keyboard nyata
-  _primeBusy = true;
-  const vv = window.visualViewport;
-  const w = (vv ? vv.width : window.innerWidth) + "px";
-  const h = (vv ? vv.height : window.innerHeight) + "px";
-  // niru state keyboard (lihat onVV): .app jadi fixed full-screen → iOS re-sample warna status bar.
-  // TAHAN ~150ms biar iOS sempat sample warna biru SEBELUM dibalikin (revert kecepetan = gagal).
-  app.style.position = "fixed";
-  app.style.left = "0px"; app.style.top = "0px";
-  app.style.width = w; app.style.height = h;
-  void app.offsetHeight;                       // paksa layout dihitung ulang
-  setTimeout(() => {
-    app.style.position = ""; app.style.left = ""; app.style.top = "";
-    app.style.width = ""; app.style.height = "";
-    void app.offsetHeight;
-    _primeBusy = false;
-  }, 150);
-}
-window.addEventListener("load", () => {
-  // beberapa kali sebab cold-start PWA paint-nya telat
-  [120, 400, 900, 1600].forEach((t) => setTimeout(primeStatusBar, t));
-});
