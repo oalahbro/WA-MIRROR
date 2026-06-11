@@ -1397,7 +1397,11 @@ function applyTheme(name) {
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
 document.querySelectorAll(".theme-opt").forEach((o) => {
-  o.onclick = () => { applyTheme(o.dataset.theme); }; // popover tetap terbuka biar bisa atur aksen
+  o.onclick = () => {
+    if (o.dataset.theme === curTheme) return;   // tema yang sama → tidak usah apa-apa
+    applyTheme(o.dataset.theme);                // simpan pilihan ke localStorage
+    location.reload();                          // reload → UI & status bar iOS paint fresh sesuai tema
+  };
 });
 document.querySelectorAll(".accent-swatches .swatch").forEach((s) => {
   s.onclick = () => { curAccent = s.dataset.accent || ""; localStorage.setItem("wa_accent", curAccent); applyAccent(); };
