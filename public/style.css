@@ -42,16 +42,16 @@
   --bubble-radius: 18px; --bubble-tail: 18px; --bubble-pad: 9px 14px 7px;
   --bubble-shadow: 0 2px 7px rgba(0,0,0,.3); --bubble-border: none;
 }
-:root[data-theme="bbm"] {                     /* BBM — BlackBerry Messenger klasik (gunmetal) */
-  --green: #087099; --green-dark: #3ba3cc;
-  --bg: #15171a; --panel: #20242a; --panel-2: #2a2f36;
-  --border: #3a4048; --divider: #24292f;
-  --text: #e6eaee; --muted: #98a2ac;
+:root[data-theme="bbm"] {                     /* BBM — versi TERANG, aksen #087099 */
+  --green: #087099; --green-dark: #086a8f;
+  --bg: #eef3f5; --panel: #ffffff; --panel-2: #f2f5f6;
+  --border: #d2d9dc; --divider: #eceff1;
+  --text: #111b21; --muted: #667781;
   --bubble-me: #3689AA; --bubble-other: #D8D8D8;
-  --input: #2e343b; --hover: #2e343b; --active: #353c44; --pinned: #1c2a33;
-  --pill: rgba(255,255,255,.07); --datesep: #24292f;
-  --overlay: rgba(21,23,26,.62); --skel1: #24292f; --skel2: #2e343b;
-  --amber: #f0ad4e; --red: #f15c57; --blue: #82b6dd;
+  --input: #ffffff; --hover: #e9eef0; --active: #eef3f5; --pinned: #eef6fa;
+  --pill: rgba(0,0,0,.06); --datesep: rgba(255,255,255,.92);
+  --overlay: rgba(238,243,245,.6); --skel1: #e3e8ea; --skel2: #eef2f3;
+  --amber: #f0ad4e; --red: #e0524d; --blue: #2f80ed;
   /* gaya bubble: kotak klasik BBM, flat + garis tepi */
   --bubble-radius: 3px; --bubble-tail: 3px; --bubble-pad: 6px 10px 5px;
   --bubble-shadow: none; --bubble-border: 1px solid var(--border);
@@ -63,6 +63,10 @@
 :root[data-theme="bbm"] .bubble.other .body a,
 :root[data-theme="bbm"] .bubble.other .quoted .q-sender { color: #1f6f95; }
 :root[data-theme="bbm"] .bubble.other .quoted .q-text { color: #4a575f; }
+/* BBM terang: bubble-ku biru (#3689AA) → teks putih biar kebaca */
+:root[data-theme="bbm"] .bubble.me { color: #fff; }
+:root[data-theme="bbm"] .bubble.me .meta { color: rgba(255,255,255,.82); }
+:root[data-theme="bbm"] .bubble.me .body a { color: #d6f0fb; }
 /* BBM: blok kutipan di bubble-ku (biru) → latar lebih gelap + teks terang biar terbaca */
 :root[data-theme="bbm"] .bubble.me .quoted { background: rgba(0,0,0,.22); }
 :root[data-theme="bbm"] .bubble.me .quoted .q-sender { color: #cfe8f3; }
@@ -206,7 +210,7 @@ body {
 .theme-prev[data-t="light"] { background: #eae6df; }
 .theme-prev[data-t="dark"]  { background: #0b141a; }
 .theme-prev[data-t="senja"] { background: #1b1620; }
-.theme-prev[data-t="bbm"]   { background: #15171a; }
+.theme-prev[data-t="bbm"]   { background: #eef3f5; }
 .theme-prev::after {
   content: ""; position: absolute; right: 6px; bottom: 6px; width: 16px; height: 16px; border-radius: 50%;
 }
