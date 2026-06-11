@@ -105,6 +105,7 @@ function logout() {
   $("app").classList.add("hidden");
   $("qrOverlay").classList.add("hidden");
   $("login").classList.remove("hidden");
+  setBottomBg();   // bottom = bg login
 }
 
 // ---------- status / QR / sync ----------
@@ -490,6 +491,7 @@ async function openChat(jid, title) {
   activeJid = jid;
   oldestLoaded = 0;
   $("app").classList.add("chat-open");   // mobile: geser ke tampilan percakapan
+  setBottomBg();                          // bottom = compose
   $("convEmpty").classList.add("hidden");
   $("convView").classList.remove("hidden");
   $("convTitle").textContent = title;
@@ -535,6 +537,7 @@ async function openChat(jid, title) {
 // Mobile: kembali ke daftar chat
 function backToList() {
   $("app").classList.remove("chat-open");
+  setBottomBg();             // bottom = sidebar
   clearInterval(msgPollTimer);
   activeJid = null;          // lepas active → badge unread jalan normal lagi
   renderChats();
@@ -1396,8 +1399,21 @@ function syncThemeColor() {
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) { meta = document.createElement("meta"); meta.setAttribute("name", "theme-color"); document.head.appendChild(meta); }
   meta.setAttribute("content", c);
-  // background <html> = warna header → area home-indicator (yg tak ke-cover) ikut warna ini, bukan putih
-  document.documentElement.style.backgroundColor = c;
+}
+
+// Area home-indicator (34px paling bawah) tak bisa ditutup fixed element di iOS standalone →
+// yang nongol = background <html>. Samakan dgn elemen paling bawah tampilan aktif biar mulus:
+// login → bg login, chat (mobile) → compose, list → sidebar.
+function setBottomBg() {
+  const app = $("app");
+  let sel;
+  if (!app || app.classList.contains("hidden")) sel = ".login";
+  else if (app.classList.contains("chat-open")) sel = ".compose";
+  else sel = ".sidebar";
+  const el = document.querySelector(sel);
+  if (!el) return;
+  const c = getComputedStyle(el).backgroundColor;
+  if (c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent") document.documentElement.style.backgroundColor = c;
 }
 
 function applyTheme(name) {
@@ -1407,6 +1423,7 @@ function applyTheme(name) {
   document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === curTheme));
   applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
   syncThemeColor();
+  setBottomBg();
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
@@ -1581,7 +1598,8 @@ document.addEventListener("click", (e) => {
 function startApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
-  syncThemeColor();   // header kini terlihat → set ulang theme-color & bg html
+  syncThemeColor();   // header kini terlihat → set ulang theme-color
+  setBottomBg();
   showChatSkeleton();
   setPill("connecting", "Menghubungkan…");
   checkStatus();
