@@ -1387,12 +1387,24 @@ function applyAccent() {
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
 }
 
+// Selaraskan warna system UI (status bar iOS / address bar Android) dgn warna header tema aktif.
+function syncThemeColor() {
+  const head = document.querySelector(".sidebar-head");
+  if (!head) return;
+  const c = getComputedStyle(head).backgroundColor;
+  if (!c || c === "rgba(0, 0, 0, 0)" || c === "transparent") return;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) { meta = document.createElement("meta"); meta.setAttribute("name", "theme-color"); document.head.appendChild(meta); }
+  meta.setAttribute("content", c);
+}
+
 function applyTheme(name) {
   curTheme = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
   document.documentElement.setAttribute("data-theme", curTheme);
   localStorage.setItem("wa_theme", curTheme);
   document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === curTheme));
   applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
+  syncThemeColor();
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
