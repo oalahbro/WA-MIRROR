@@ -1,7 +1,20 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-let TOKEN = localStorage.getItem("wa_token") || "";
+
+// Token persist: localStorage SERING di-evict iOS PWA saat app ditutup → simpan cadangan di cookie
+// (lebih awet di standalone). Baca dari mana pun yang masih ada, lalu sinkronkan dua-duanya.
+function setCookie(name, val, days) {
+  document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=${days * 86400}; SameSite=Lax`;
+}
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function saveToken(t) { localStorage.setItem("wa_token", t); setCookie("wa_token", t, 365); }
+
+let TOKEN = localStorage.getItem("wa_token") || getCookie("wa_token") || "";
+if (TOKEN) saveToken(TOKEN); // pulihkan ke dua tempat kalau salah satu sempat hilang
 let activeJid = null;
 let oldestLoaded = 0;     // timestamp pesan tertua yang sudah dimuat (cursor)
 let allChats = [];
@@ -69,6 +82,7 @@ function toast(msg, kind = "", ms = 3000) {
 // ---------- login ----------
 $("loginBtn").onclick = doLogin;
 $("tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+if (TOKEN) $("tokenInput").value = TOKEN; // prefill saat layar login tampil (mis. server lagi down)
 
 function setBtnLoading(btn, loading) {
   btn.disabled = loading;
@@ -85,7 +99,7 @@ async function doLogin() {
     const res = await fetch("/api/login?token=" + encodeURIComponent(t)).then((r) => r.json());
     if (res.ok) {
       TOKEN = t;
-      localStorage.setItem("wa_token", t);
+      saveToken(t);
       startApp();
     } else {
       $("loginErr").textContent = "Token salah.";
@@ -96,15 +110,17 @@ async function doLogin() {
     setBtnLoading($("loginBtn"), false);
   }
 }
+// Sesi berakhir / token ditolak → tampilkan layar login, TAPI jangan hapus token tersimpan.
+// Token di-prefill biar cukup 1x tap "Masuk" (bukan ketik ulang). Token hanya berubah kalau
+// user memang memasukkan yang baru. Ini mencegah re-input gara-gara 401/eviction sesaat.
 function logout() {
-  localStorage.removeItem("wa_token");
-  TOKEN = "";
   clearInterval(chatPollTimer); clearInterval(msgPollTimer);
   chatsLoadedOnce = false;
   lastConnState = "";
   $("app").classList.add("hidden");
   $("qrOverlay").classList.add("hidden");
   $("login").classList.remove("hidden");
+  if (TOKEN) $("tokenInput").value = TOKEN; // prefill → tinggal tap Masuk
 }
 
 // ---------- status / QR / sync ----------
