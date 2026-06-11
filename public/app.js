@@ -1630,6 +1630,7 @@ if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
   let maxVH = 0;
+  let kbWasOpen = false;
   const onVV = () => {
     maxVH = Math.max(maxVH, vv.height);
     // Keyboard terdeteksi via offsetTop melonjak (device ini) ATAU height menyusut (device lain).
@@ -1645,6 +1646,10 @@ if (window.visualViewport) {
     } else {
       app.style.position = ""; app.style.left = ""; app.style.top = ""; app.style.width = ""; app.style.height = "";
     }
+    // Saat keyboard MENUTUP: .app sudah balik normal → status bar iOS biasanya nyangkut di warna
+    // terakhir (mis. biru saat keyboard tadi nembus header). Pancing re-sample agar ikut tema kini.
+    if (kbWasOpen && !kbOpen) setTimeout(nudgeStatusBar, 60);
+    kbWasOpen = kbOpen;
   };
   vv.addEventListener("resize", onVV);
   vv.addEventListener("scroll", onVV);
