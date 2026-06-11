@@ -1423,10 +1423,25 @@ document.querySelectorAll(".theme-opt").forEach((o) => {
 document.querySelectorAll(".accent-swatches .swatch").forEach((s) => {
   s.onclick = () => { curAccent = s.dataset.accent || ""; localStorage.setItem("wa_accent", curAccent); applyAccent(); };
 });
-// pointerdown (bukan click) → di iOS klik pada div/area kosong sering tak memicu; pointerdown selalu jalan
+// Tutup popover saat tap di luar. pointerdown (bukan click) → di iOS klik pada div/area kosong
+// sering tak memicu; pointerdown selalu jalan. Bila tap-luar ini menutup popover, "telan" klik
+// yang menyusul (fase capture) supaya TIDAK ikut membuka chat di belakangnya.
+let _swallowClick = false;
 document.addEventListener("pointerdown", (e) => {
-  if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");
+  _swallowClick = false;
+  const tp = $("themePopover"), np = $("newChatPopover");
+  let closed = false;
+  if (!tp.classList.contains("hidden") && !e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) {
+    tp.classList.add("hidden"); closed = true;
+  }
+  if (!np.classList.contains("hidden") && !e.target.closest("#newChatPopover") && !e.target.closest("#newChatBtn")) {
+    np.classList.add("hidden"); closed = true;
+  }
+  if (closed) _swallowClick = true;
 });
+document.addEventListener("click", (e) => {
+  if (_swallowClick) { _swallowClick = false; e.stopPropagation(); e.preventDefault(); }
+}, true); // capture → jalan sebelum handler chat, jadi klik penutup popover tidak membuka chat
 applyTheme(localStorage.getItem("wa_theme") || "light");
 
 // ---------- chat baru ke nomor manual ----------
@@ -1462,9 +1477,7 @@ $("newChatBtn").onclick = (e) => {
 $("newChatGo").onclick = startNewChat;
 $("newChatClose").onclick = () => { $("newChatPopover").classList.add("hidden"); setNewChatErr(""); };
 $("newChatNum").addEventListener("keydown", (e) => { if (e.key === "Enter") startNewChat(); });
-document.addEventListener("pointerdown", (e) => {
-  if (!e.target.closest("#newChatPopover") && !e.target.closest("#newChatBtn")) $("newChatPopover").classList.add("hidden");
-});
+// (tutup-di-luar untuk newChatPopover sudah ditangani handler pointerdown gabungan di atas)
 // Pulihkan tab filter terakhir yang dipilih.
 document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
 
