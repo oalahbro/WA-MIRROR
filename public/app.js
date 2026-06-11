@@ -1366,6 +1366,7 @@ const ACCENTS = {
   rose:   { base: "#ff4f8b", light: "#d62e6a", dark: "#ff8fbb", bubble: "#ffe2ef" },
   teal:   { base: "#0d9488", light: "#0b7268", dark: "#2dd4bf", bubble: "#cdeee9" },
   maroon: { base: "#9b2335", light: "#7a1c2a", dark: "#cf6e7c", bubble: "#f1d6db" },
+  ocean:  { base: "#087099", light: "#065d7d", dark: "#3aa6cc", bubble: "#d2ecf6" }, // biru header BBM
 };
 let curTheme = "light";
 let curAccent = localStorage.getItem("wa_accent") || ""; // "" = ikut bawaan tema
