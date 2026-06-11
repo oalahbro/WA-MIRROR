@@ -67,6 +67,13 @@
 :root[data-theme="bbm"] .bubble.me .quoted { background: rgba(0,0,0,.22); }
 :root[data-theme="bbm"] .bubble.me .quoted .q-sender { color: #cfe8f3; }
 :root[data-theme="bbm"] .bubble.me .quoted .q-text { color: #eaf4f9; }
+/* BBM: header (sidebar & percakapan) pakai aksen #087099, teksnya dibuat putih */
+:root[data-theme="bbm"] .sidebar-head,
+:root[data-theme="bbm"] .conv-head { background: #087099; }
+:root[data-theme="bbm"] .sidebar-head .me,
+:root[data-theme="bbm"] .conv-title,
+:root[data-theme="bbm"] .back-btn,
+:root[data-theme="bbm"] .stats-line { color: #fff; }
 html, body { height: 100%; overflow: hidden; }
 body {
   /* stack font ala WhatsApp Web (iOS→Helvetica Neue, Windows→Segoe UI, Android→Roboto) */
