@@ -1627,3 +1627,28 @@ if (window.visualViewport) {
   vv.addEventListener("scroll", onVV);
   onVV();
 }
+
+// ===== DEBUG status bar iOS (sementara — hapus setelah selesai) =====
+(function dbgStatusBar() {
+  try {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-top,0px);width:0;pointer-events:none;";
+    document.body.appendChild(probe);
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;top:96px;left:6px;z-index:100000;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;padding:4px 7px;border-radius:5px;pointer-events:none;white-space:pre";
+    document.body.appendChild(d);
+    function upd() {
+      const sa = ("standalone" in navigator) ? navigator.standalone : "n/a";
+      const dm = matchMedia("(display-mode: standalone)").matches;
+      const head = document.querySelector(".sidebar-head");
+      const cs = head ? getComputedStyle(head) : null;
+      const tcEl = document.querySelector('meta[name="theme-color"]');
+      d.textContent =
+        "standalone:" + sa + "  dmode:" + dm + "\n" +
+        "safe-area-top:" + probe.offsetHeight + "px\n" +
+        "head-padTop:" + (cs ? cs.paddingTop : "?") + "  bg:" + (cs ? cs.backgroundColor : "?") + "\n" +
+        "themeColor:" + (tcEl ? tcEl.getAttribute("content") : "(none)");
+    }
+    upd(); setTimeout(upd, 1000); window.addEventListener("resize", upd);
+  } catch (e) {}
+})();
