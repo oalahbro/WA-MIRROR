@@ -1606,6 +1606,14 @@ if ("serviceWorker" in navigator) {
 // iOS: 100dvh TIDAK menyusut saat keyboard muncul → .app tetap setinggi layar penuh &
 // compose kedorong di belakang keyboard (muncul "space tebal"). Fix: kecilkan tinggi .app
 // ke tinggi visualViewport saat keyboard naik → compose nempel pas di atas keyboard.
+// Set tinggi app/login = window.innerHeight (layar fisik penuh). Di iOS standalone,
+// 100dvh/fixed-inset kadang cuma seukuran safe-area → sisakan strip home-indicator;
+// innerHeight justru penuh, jadi pakai itu.
+function setAppH() { document.documentElement.style.setProperty("--app-h", window.innerHeight + "px"); }
+setAppH();
+window.addEventListener("resize", setAppH);
+window.addEventListener("orientationchange", () => setTimeout(setAppH, 200));
+
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
