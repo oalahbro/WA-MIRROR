@@ -1370,26 +1370,6 @@ const ACCENTS = {
 let curTheme = "light";
 let curAccent = localStorage.getItem("wa_accent") || ""; // "" = ikut bawaan tema
 
-// Ganti tema/aksen mengubah warna header. Di iOS standalone, status bar baru "mengambil" warna itu
-// setelah ada reflow layout (mirip saat keyboard muncul). Pancing reflow singkat agar status bar
-// langsung ikut warna tema baru tanpa harus tutup-buka app. Tanpa efek visual; di-skip saat
-// keyboard nyata terbuka atau app belum tampil.
-function nudgeStatusBar() {
-  const app = $("app");
-  if (!app || app.classList.contains("hidden")) return;
-  if (document.documentElement.classList.contains("kb-open")) return;
-  const vv = window.visualViewport;
-  app.style.position = "fixed";
-  app.style.left = "0px"; app.style.top = "0px";
-  app.style.width = (vv ? vv.width : window.innerWidth) + "px";
-  app.style.height = (vv ? vv.height : window.innerHeight) + "px";
-  void app.offsetHeight;                       // paksa layout dihitung ulang → iOS re-sample warna
-  requestAnimationFrame(() => {
-    app.style.position = ""; app.style.left = ""; app.style.top = "";
-    app.style.width = ""; app.style.height = "";
-  });
-}
-
 function applyAccent() {
   const root = document.documentElement;
   const a = ACCENTS[curAccent];
@@ -1405,7 +1385,6 @@ function applyAccent() {
   }
   document.querySelectorAll(".accent-swatches .swatch").forEach((s) =>
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
-  nudgeStatusBar(); // status bar iOS langsung ikut warna tema/aksen baru
 }
 
 function applyTheme(name) {
@@ -1630,7 +1609,6 @@ if (window.visualViewport) {
   const vv = window.visualViewport;
   const app = $("app");
   let maxVH = 0;
-  let kbWasOpen = false;
   const onVV = () => {
     maxVH = Math.max(maxVH, vv.height);
     // Keyboard terdeteksi via offsetTop melonjak (device ini) ATAU height menyusut (device lain).
@@ -1646,10 +1624,6 @@ if (window.visualViewport) {
     } else {
       app.style.position = ""; app.style.left = ""; app.style.top = ""; app.style.width = ""; app.style.height = "";
     }
-    // Saat keyboard MENUTUP: .app sudah balik normal → status bar iOS biasanya nyangkut di warna
-    // terakhir (mis. biru saat keyboard tadi nembus header). Pancing re-sample agar ikut tema kini.
-    if (kbWasOpen && !kbOpen) setTimeout(nudgeStatusBar, 60);
-    kbWasOpen = kbOpen;
   };
   vv.addEventListener("resize", onVV);
   vv.addEventListener("scroll", onVV);
