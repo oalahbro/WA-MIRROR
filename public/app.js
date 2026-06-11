@@ -1423,7 +1423,8 @@ document.querySelectorAll(".theme-opt").forEach((o) => {
 document.querySelectorAll(".accent-swatches .swatch").forEach((s) => {
   s.onclick = () => { curAccent = s.dataset.accent || ""; localStorage.setItem("wa_accent", curAccent); applyAccent(); };
 });
-document.addEventListener("click", (e) => {
+// pointerdown (bukan click) → di iOS klik pada div/area kosong sering tak memicu; pointerdown selalu jalan
+document.addEventListener("pointerdown", (e) => {
   if (!e.target.closest("#themePopover") && !e.target.closest("#themeBtn")) $("themePopover").classList.add("hidden");
 });
 applyTheme(localStorage.getItem("wa_theme") || "light");
@@ -1461,7 +1462,7 @@ $("newChatBtn").onclick = (e) => {
 $("newChatGo").onclick = startNewChat;
 $("newChatClose").onclick = () => { $("newChatPopover").classList.add("hidden"); setNewChatErr(""); };
 $("newChatNum").addEventListener("keydown", (e) => { if (e.key === "Enter") startNewChat(); });
-document.addEventListener("click", (e) => {
+document.addEventListener("pointerdown", (e) => {
   if (!e.target.closest("#newChatPopover") && !e.target.closest("#newChatBtn")) $("newChatPopover").classList.add("hidden");
 });
 // Pulihkan tab filter terakhir yang dipilih.

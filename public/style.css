@@ -698,10 +698,14 @@ body {
   .chat-filters {
     position: fixed; left: 12px; right: 12px; z-index: 15; margin-top: 0;
     bottom: env(safe-area-inset-bottom, 0px);   /* mentok bawah aman (di atas home indicator) */
-    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.2); padding: 9px 8px; /* agak tebal */
+    background: var(--green); border: none; border-radius: 16px; /* bar ikut warna header */
+    box-shadow: 0 4px 16px rgba(0,0,0,.25); padding: 9px 8px; /* agak tebal */
   }
-  .chat-filters .filter-tab { padding: 8px 8px; }            /* tab sedikit lebih tinggi */
+  /* tombol filter di bar mengambang: putih. Aktif = putih solid, non-aktif = putih transparan */
+  .chat-filters .filter-tab { padding: 8px 8px; background: rgba(255,255,255,.22); color: #fff; }
+  .chat-filters .filter-tab.active { background: #fff; color: var(--green-dark); }
+  .chat-filters .filter-tab .filter-count { background: rgba(255,255,255,.28); color: #fff; }
+  .chat-filters .filter-tab.active .filter-count { background: var(--green); color: #fff; }
   .chat-list { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); } /* ruang utk bar */
   .app.chat-open .chat-filters { display: none; } /* sembunyi saat di percakapan */
 
