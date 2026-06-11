@@ -15,8 +15,9 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Splash biru saat boot: manfaatkan momen loading → uji apakah status bar iOS ke-sample biru -->
-  <div id="bootSplash"><span class="boot-spin"></span></div>
+  <!-- Pewarna status bar iOS: strip fixed setinggi safe-area-top, warna ikut header tema.
+       iOS men-sample warna status bar dari layer fixed teratas → status bar ikut tema, tanpa gap. -->
+  <div id="statusTint" aria-hidden="true"></div>
 
   <!-- Layar login -->
   <div id="login" class="login">

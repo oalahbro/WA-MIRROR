@@ -1,20 +1,15 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ===== Boot splash biru: tampil sejak frame pertama (sebelum app.js jalan) lalu fade-out.
-   Tujuan: jadi konten teratas saat iOS men-sample warna status bar di cold-start. ===== */
-#bootSplash {
-  position: fixed; inset: 0; z-index: 99999;
-  background: #087099;
-  display: flex; align-items: center; justify-content: center;
-  transition: opacity .35s ease;
+/* ===== Pewarna area status bar iOS (standalone PWA) =====
+   Strip fixed setinggi safe-area-top, warna = header tema. iOS men-sample warna status bar
+   dari layer fixed teratas yang menutupi zona aman → status bar ikut warna tema, tanpa gap bawah.
+   Otomatis ganti warna saat tema berganti (var(--green)). */
+#statusTint {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--green);
+  z-index: 99998; pointer-events: none;
 }
-#bootSplash.hide { opacity: 0; pointer-events: none; }
-#bootSplash .boot-spin {
-  width: 34px; height: 34px; border-radius: 50%;
-  border: 3px solid rgba(255,255,255,.35); border-top-color: #fff;
-  animation: bootspin .8s linear infinite;
-}
-@keyframes bootspin { to { transform: rotate(360deg); } }
 /* ===== Tema (3 pilihan via data-theme di <html>) ===== */
 :root, :root[data-theme="light"] {            /* Terang — WhatsApp klasik */
   --green: #00a884; --green-dark: #008069;
