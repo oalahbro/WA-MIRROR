@@ -1415,7 +1415,10 @@ function setBottomBg() {
   const el = document.querySelector(sel);
   if (!el) return;
   const c = getComputedStyle(el).backgroundColor;
-  if (c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent") document.documentElement.style.backgroundColor = c;
+  if (c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent") {
+    document.documentElement.style.backgroundColor = c;
+    document.body.style.backgroundColor = c;   // canvas/strip ambil dari body → set ini juga
+  }
 }
 
 function applyTheme(name) {
