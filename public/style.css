@@ -44,13 +44,13 @@
 }
 :root[data-theme="bbm"] {                     /* BBM — versi TERANG, aksen #087099 */
   --green: #087099; --green-dark: #086a8f;
-  --bg: #e7edef; --panel: #ffffff; --panel-2: #f2f5f6;
+  --bg: #eef3f5; --panel: #ffffff; --panel-2: #f2f5f6;
   --border: #d2d9dc; --divider: #eceff1;
   --text: #111b21; --muted: #667781;
   --bubble-me: #3689AA; --bubble-other: #D8D8D8;
   --input: #ffffff; --hover: #e9eef0; --active: #eef3f5; --pinned: #eef6fa;
   --pill: rgba(0,0,0,.06); --datesep: rgba(255,255,255,.92);
-  --overlay: rgba(231,237,239,.6); --skel1: #e3e8ea; --skel2: #eef2f3;
+  --overlay: rgba(238,243,245,.6); --skel1: #e3e8ea; --skel2: #eef2f3;
   --amber: #f0ad4e; --red: #e0524d; --blue: #2f80ed;
   /* gaya bubble: kotak klasik BBM, flat + garis tepi */
   --bubble-radius: 3px; --bubble-tail: 3px; --bubble-pad: 6px 10px 5px;
