@@ -1601,6 +1601,7 @@ if (TOKEN) {
     if (res.ok) startApp(); else logout();
   }).catch(() => {});
 }
+
 // Daftarkan service worker (PWA: installable + launch lebih cepat). Hanya di konteks aman (https/localhost).
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
