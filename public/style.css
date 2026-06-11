@@ -95,7 +95,7 @@ body {
 
 /* ---------- login ---------- */
 .login {
-  position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%);
+  position: fixed; top: 0; left: 0; right: 0; height: calc(var(--app-h, 100%) + env(safe-area-inset-bottom, 0px));
   display: flex; align-items: center; justify-content: center;
   background: var(--green-dark);
 }
@@ -148,7 +148,7 @@ body {
 .qr-wait { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
 
 /* ---------- app layout ---------- */
-.app { display: flex; position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); overflow: hidden; }
+.app { display: flex; position: fixed; top: 0; left: 0; right: 0; height: calc(var(--app-h, 100dvh) + env(safe-area-inset-bottom, 0px)); overflow: hidden; }
 .sidebar {
   flex: 0 0 460px; width: 460px;          /* lebar tetap, tidak ikut berubah */
   min-width: 0; background: var(--panel);
