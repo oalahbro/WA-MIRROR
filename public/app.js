@@ -1602,8 +1602,16 @@ if (TOKEN) {
 
 // Daftarkan service worker (PWA: installable + launch lebih cepat). Hanya di konteks aman (https/localhost).
 if ("serviceWorker" in navigator) {
+  // Saat versi SW baru aktif (deploy baru), iOS PWA sering masih menyajikan shell lama.
+  // controllerchange = SW baru sudah mengambil alih → reload sekali agar konten versi baru kebaca.
+  let _swRefreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (_swRefreshing) return;
+    _swRefreshing = true;
+    location.reload();
+  });
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker.register("/sw.js").then((reg) => reg.update()).catch(() => {});
   });
 }
 
