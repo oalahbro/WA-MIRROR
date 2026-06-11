@@ -1387,12 +1387,27 @@ function applyAccent() {
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
 }
 
+// Selaraskan warna system UI (status bar) + bg <html> dgn warna header tema aktif.
+// black-translucent bikin status bar tembus → header (warna) keliatan; bg <html> bikin
+// strip home-indicator paling bawah ikut warna yg sama (frame atas-bawah konsisten).
+function syncThemeColor() {
+  const head = document.querySelector(".sidebar-head");
+  if (!head) return;
+  const c = getComputedStyle(head).backgroundColor;
+  if (!c || c === "rgba(0, 0, 0, 0)" || c === "transparent") return;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) { meta = document.createElement("meta"); meta.setAttribute("name", "theme-color"); document.head.appendChild(meta); }
+  meta.setAttribute("content", c);
+  document.documentElement.style.backgroundColor = c;
+}
+
 function applyTheme(name) {
   curTheme = THEMES.includes(name) ? name : "light";   // nilai lama (green/blue/…) → light
   document.documentElement.setAttribute("data-theme", curTheme);
   localStorage.setItem("wa_theme", curTheme);
   document.querySelectorAll(".theme-opt").forEach((o) => o.classList.toggle("active", o.dataset.theme === curTheme));
   applyAccent(); // turunkan ulang aksen sesuai terang/gelap tema baru
+  syncThemeColor();
 }
 
 $("themeBtn").onclick = (e) => { e.stopPropagation(); $("newChatPopover").classList.add("hidden"); $("themePopover").classList.toggle("hidden"); };
@@ -1567,6 +1582,7 @@ document.addEventListener("click", (e) => {
 function startApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
+  syncThemeColor();   // header kini terlihat → set theme-color & bg html
   showChatSkeleton();
   setPill("connecting", "Menghubungkan…");
   checkStatus();
