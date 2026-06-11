@@ -1623,22 +1623,27 @@ if (window.visualViewport) {
 // iOS standalone PWA: status bar baru "ngambil" warna header (biru) setelah ada reflow layout —
 // makanya warnanya baru muncul setelah keyboard dibuka. Pancing reflow singkat saat load biar
 // status bar langsung sesuai tema tanpa harus klik kolom cari dulu. (Tanpa efek visual.)
+let _primeBusy = false;
 function primeStatusBar() {
   const app = $("app");
-  if (!app) return;
+  if (!app || _primeBusy || app.classList.contains("hidden")) return;
+  if (document.documentElement.classList.contains("kb-open")) return; // jgn ganggu saat keyboard nyata
+  _primeBusy = true;
   const vv = window.visualViewport;
   const w = (vv ? vv.width : window.innerWidth) + "px";
   const h = (vv ? vv.height : window.innerHeight) + "px";
-  // niru state keyboard (lihat onVV): .app jadi fixed full-screen → iOS re-sample warna status bar
+  // niru state keyboard (lihat onVV): .app jadi fixed full-screen → iOS re-sample warna status bar.
+  // TAHAN ~150ms biar iOS sempat sample warna biru SEBELUM dibalikin (revert kecepetan = gagal).
   app.style.position = "fixed";
   app.style.left = "0px"; app.style.top = "0px";
   app.style.width = w; app.style.height = h;
   void app.offsetHeight;                       // paksa layout dihitung ulang
-  requestAnimationFrame(() => {
+  setTimeout(() => {
     app.style.position = ""; app.style.left = ""; app.style.top = "";
     app.style.width = ""; app.style.height = "";
     void app.offsetHeight;
-  });
+    _primeBusy = false;
+  }, 150);
 }
 window.addEventListener("load", () => {
   // beberapa kali sebab cold-start PWA paint-nya telat
