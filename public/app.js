@@ -1385,6 +1385,8 @@ function applyAccent() {
   }
   document.querySelectorAll(".accent-swatches .swatch").forEach((s) =>
     s.classList.toggle("active", (s.dataset.accent || "") === curAccent));
+  // header ganti warna → paksa status bar iOS re-sample warna tema (tanpa harus close-buka app)
+  if (typeof primeStatusBar === "function") primeStatusBar();
 }
 
 function applyTheme(name) {
