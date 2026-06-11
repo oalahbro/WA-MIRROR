@@ -1634,6 +1634,9 @@ if (window.visualViewport) {
     const probe = document.createElement("div");
     probe.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-top,0px);width:0;pointer-events:none;";
     document.body.appendChild(probe);
+    const probeB = document.createElement("div");
+    probeB.style.cssText = "position:fixed;top:0;height:env(safe-area-inset-bottom,0px);width:0;pointer-events:none;";
+    document.body.appendChild(probeB);
     const d = document.createElement("div");
     d.style.cssText = "position:fixed;top:96px;left:6px;z-index:100000;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.4 monospace;padding:4px 7px;border-radius:5px;pointer-events:none;white-space:pre";
     document.body.appendChild(d);
@@ -1645,7 +1648,8 @@ if (window.visualViewport) {
       const tcEl = document.querySelector('meta[name="theme-color"]');
       d.textContent =
         "standalone:" + sa + "  dmode:" + dm + "\n" +
-        "safe-area-top:" + probe.offsetHeight + "px\n" +
+        "safe-area-top:" + probe.offsetHeight + " bottom:" + probeB.offsetHeight + "\n" +
+        "innerH:" + window.innerHeight + " appH:" + (($("app") || {}).offsetHeight || "?") + "\n" +
         "head-padTop:" + (cs ? cs.paddingTop : "?") + "  bg:" + (cs ? cs.backgroundColor : "?") + "\n" +
         "themeColor:" + (tcEl ? tcEl.getAttribute("content") : "(none)");
     }
