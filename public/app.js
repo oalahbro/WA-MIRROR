@@ -1575,6 +1575,8 @@ function startApp() {
   loadChats();
   clearInterval(chatPollTimer);
   chatPollTimer = setInterval(() => { checkStatus(); loadChats(); }, 4000);
+  // app baru kelihatan (sebelumnya .hidden) → pancing status bar iOS ambil warna header sekarang
+  [80, 300, 700, 1400].forEach((t) => setTimeout(primeStatusBar, t));
 }
 
 if (TOKEN) {
