@@ -300,6 +300,15 @@ function getContactName(jid) {
   return r && r.name ? r.name : "";
 }
 
+// Nama kontak dari BAGIAN NOMOR (cocok utk @s.whatsapp.net maupun @lid). Dipakai
+// daftar anggota grup: nama anggota mungkin tersimpan di bawah jid @lid maupun nomor.
+function contactNameByNum(num) {
+  const n = String(num || "").replace(/\D/g, "");
+  if (!n) return "";
+  const r = _contactByNum.get({ p1: n + "@%", p2: n + ":%" });
+  return r && r.name ? r.name : "";
+}
+
 // Cari isi pesan. Minimal 2 karakter. Escape wildcard LIKE (% _ \) agar literal.
 function searchMessages(q, limit = 50) {
   const term = String(q || "").trim();
@@ -347,6 +356,7 @@ module.exports = {
   getMessageRaw,
   getChatName,
   getContactName,
+  contactNameByNum,
   searchMessages,
   stats,
 };

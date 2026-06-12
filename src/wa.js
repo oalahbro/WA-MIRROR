@@ -531,18 +531,22 @@ async function editMessage(jid, id, text) {
   return sent?.key?.id || null;
 }
 
-async function sendMessage(jid, text, quotedId, quotedJid) {
+// mentions = array jid anggota yang di-tag (mis. ["62812…@s.whatsapp.net"] atau ["…@lid"]).
+// Teks harus memuat "@<nomor>" yang cocok dengan tiap jid (lihat getComposeText di frontend).
+async function sendMessage(jid, text, quotedId, quotedJid, mentions) {
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   const opts = {};
   const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
-  const sent = await sock.sendMessage(jid, { text }, opts);
+  const content = { text };
+  if (Array.isArray(mentions) && mentions.length) content.mentions = mentions;
+  const sent = await sock.sendMessage(jid, content, opts);
   return sent?.key?.id || null;
 }
 
 // Kirim foto / video / dokumen. buffer = isi file (Buffer),
 // kind = "image" | "video" | "document". fileName dipakai untuk dokumen/arsip.
-async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileName, quotedJid) {
+async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileName, quotedJid, mentions) {
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   if (!buffer || !buffer.length) throw new Error("file kosong");
   let content;
@@ -560,6 +564,8 @@ async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileNam
     throw new Error("tipe media tidak didukung");
   }
   if (caption) content.caption = caption;
+  // Mention hanya bermakna bila ada caption (teks yang memuat "@<nomor>").
+  if (caption && Array.isArray(mentions) && mentions.length) content.mentions = mentions;
   const opts = {};
   const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
@@ -591,6 +597,34 @@ async function downloadMedia(jid, id) {
     { logger: pino({ level: "silent" }), reuploadRequest: sock?.updateMediaMessage }
   );
   return { buffer, mimetype, fileName };
+}
+
+// Daftar anggota grup untuk fitur tag (@mention). Hasil di-cache singkat agar tidak
+// memanggil groupMetadata berulang saat user mengetik "@". Tiap anggota: { id, num, name,
+// admin }. Pengaddressan (id) dipakai apa adanya dari WhatsApp — bila grup pakai @lid maka
+// id ber-@lid, dan itulah yang harus masuk ke array `mentions` saat kirim supaya orangnya
+// benar-benar ke-notif. Nama diambil via nomor (cocok untuk @lid maupun @s.whatsapp.net).
+const groupMetaCache = new Map(); // jid -> { at, members }
+const GROUP_META_TTL = 60000;     // 1 menit
+async function getGroupMembers(jid) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!jid || !jid.endsWith("@g.us")) return [];
+  const cached = groupMetaCache.get(jid);
+  if (cached && Date.now() - cached.at < GROUP_META_TTL) return cached.members;
+  const meta = await sock.groupMetadata(jid);
+  const me = new Set([jidNum(status.me), jidNum(status.meLid)].filter(Boolean));
+  const members = [];
+  for (const p of meta.participants || []) {
+    const id = p.id;
+    if (!id) continue;
+    const num = jidNum(id);
+    if (me.has(num)) continue; // jangan tampilkan diri sendiri
+    const name = store.contactNameByNum(num) || num;
+    members.push({ id, num, name, admin: p.admin || "" });
+  }
+  members.sort((a, b) => a.name.localeCompare(b.name, "id"));
+  groupMetaCache.set(jid, { at: Date.now(), members });
+  return members;
 }
 
 // Petakan jid @lid (alamat tersembunyi anggota grup) → jid nomor asli (@s.whatsapp.net),
@@ -652,7 +686,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getStatus };
+module.exports = { start, sendMessage, sendMedia, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

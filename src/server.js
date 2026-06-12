@@ -161,6 +161,14 @@ app.get("/api/check-number", requireAuth, async (req, res) => {
   catch (e) { res.json({ exists: false, error: e.message }); }
 });
 
+// Daftar anggota grup (untuk autocomplete @mention). ?jid=<grup@g.us> → [{ id, num, name, admin }].
+app.get("/api/group-members", requireAuth, async (req, res) => {
+  const jid = req.query.jid;
+  if (!jid) return res.status(400).json({ error: "jid wajib" });
+  try { res.json(await wa.getGroupMembers(jid)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Resolve jid @lid (anggota grup) → nomor asli @s.whatsapp.net. { jid: "" } bila tak ada mapping.
 app.get("/api/resolve-jid", requireAuth, async (req, res) => {
   const jid = req.query.jid;
@@ -253,10 +261,11 @@ app.get("/api/avatar", requireAuth, async (req, res) => {
 });
 
 app.post("/api/send", requireAuth, async (req, res) => {
-  const { jid, text, quotedId, quotedJid } = req.body || {};
+  const { jid, text, quotedId, quotedJid, mentions } = req.body || {};
   if (!jid || !text) return res.status(400).json({ error: "jid & text wajib" });
   try {
-    const id = await wa.sendMessage(jid, text, quotedId, quotedJid);
+    const ment = Array.isArray(mentions) ? mentions.filter((m) => typeof m === "string" && m) : undefined;
+    const id = await wa.sendMessage(jid, text, quotedId, quotedJid, ment);
     res.json({ ok: true, id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -289,6 +298,8 @@ app.post(
     const quotedId = req.query.quotedId || "";
     const quotedJid = req.query.quotedJid || "";
     const fileName = req.query.fileName || "";
+    // mentions = jid anggota yang di-tag di caption, dipisah koma.
+    const mentions = String(req.query.mentions || "").split(",").map((s) => s.trim()).filter(Boolean);
     let mimetype = req.get("content-type") || "";
     // Dokumen: pastikan mimetype masuk akal (browser sering kirim octet-stream/kosong).
     if (kind === "document" && (!mimetype || mimetype === "application/octet-stream")) {
@@ -299,7 +310,7 @@ app.post(
       return res.status(400).json({ error: "file kosong" });
     }
     try {
-      const id = await wa.sendMedia(jid, kind, req.body, mimetype, caption, quotedId, fileName, quotedJid);
+      const id = await wa.sendMedia(jid, kind, req.body, mimetype, caption, quotedId, fileName, quotedJid, mentions);
       res.json({ ok: true, id });
     } catch (e) {
       res.status(500).json({ error: e.message });

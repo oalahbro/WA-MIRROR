@@ -598,6 +598,32 @@ body {
   white-space: pre-wrap; overflow-wrap: anywhere; cursor: text;
 }
 .send-input:empty:before { content: attr(data-ph); color: var(--muted); pointer-events: none; }
+/* chip mention di kolom ketik (atomik, non-editable) */
+.send-input .mention {
+  color: var(--green-dark); font-weight: 600; background: var(--pill);
+  border-radius: 4px; padding: 0 3px; white-space: nowrap;
+}
+
+/* picker @mention (autocomplete anggota grup) — sama pola dgn emoji-panel */
+.mention-picker {
+  position: absolute; bottom: 64px; left: 12px; z-index: 30;
+  width: 320px; max-width: calc(100% - 24px); max-height: 240px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px;
+}
+.mention-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: none; background: transparent; cursor: pointer;
+  padding: 7px 10px; border-radius: 8px; color: var(--text);
+}
+.mention-item:hover, .mention-item.active { background: var(--hover); }
+.mention-av {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 600;
+}
+.mention-name { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mention-num { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .send-input img.bbm-emo { width: 22px; height: 22px; vertical-align: -5px; object-fit: contain; }
 /* pesan yang isinya hanya emoticon BBM → gambar besar tanpa bubble */
 .bubble.bbm-only { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 2px; }

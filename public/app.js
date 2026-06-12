@@ -18,6 +18,11 @@ let editingId = null;     // id pesan yang sedang diedit (null = tidak sedang ed
 let chatFilter = localStorage.getItem("wa_filter") || "all"; // all | private | group
 let msgSearchMode = false;   // true saat menampilkan hasil cari ISI pesan
 let msgSearchQuery = "";
+let groupMembers = [];       // anggota grup chat aktif (untuk @mention); [] di chat pribadi
+// State picker @mention: posisi token "@query" di editor + daftar terfilter & indeks aktif.
+let mentionState = null;     // { node, start, end } atau null bila picker tertutup
+let mentionFiltered = [];
+let mentionIdx = 0;
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -506,6 +511,8 @@ async function openChat(jid, title) {
   $("convLoading").classList.remove("hidden");
   clearAttach();
   clearReply();
+  closeMentionPicker();
+  loadGroupMembers(jid);   // siapkan daftar anggota utk @mention (hanya grup)
   // tandai chat ini sudah dibaca (hapus badge unread)
   const curChat = allChats.find((x) => x.jid === jid);
   if (curChat) curChat.unread = 0;
@@ -537,6 +544,8 @@ function backToList() {
   $("app").classList.remove("chat-open");
   clearInterval(msgPollTimer);
   activeJid = null;          // lepas active → badge unread jalan normal lagi
+  groupMembers = [];
+  closeMentionPicker();
   renderChats();
 }
 $("backBtn").onclick = backToList;
@@ -1225,7 +1234,8 @@ function getComposeText() {
     node.childNodes.forEach((n) => {
       if (n.nodeType === 3) out += n.nodeValue;
       else if (n.nodeType === 1) {
-        if (n.tagName === "IMG") out += n.dataset.code || n.getAttribute("alt") || "";
+        if (n.classList && n.classList.contains("mention")) out += "@" + (n.dataset.num || "");
+        else if (n.tagName === "IMG") out += n.dataset.code || n.getAttribute("alt") || "";
         else if (n.tagName === "BR") out += "\n";
         else {
           if (n.tagName === "DIV" && out && !out.endsWith("\n")) out += "\n";
@@ -1235,6 +1245,14 @@ function getComposeText() {
     });
   })(root);
   return out;
+}
+// Kumpulkan jid anggota yang masih ter-tag di editor (chip mention). Unik.
+function getComposeMentions() {
+  const set = new Set();
+  $("sendInput").querySelectorAll(".mention[data-jid]").forEach((s) => {
+    if (s.dataset.jid) set.add(s.dataset.jid);
+  });
+  return [...set];
 }
 function clearCompose() { $("sendInput").innerHTML = ""; }
 // Isi editor dari teks (kode :bNNN: → gambar) — dipakai saat mengembalikan teks gagal kirim.
@@ -1254,7 +1272,9 @@ $("sendForm").addEventListener("submit", (e) => {
 });
 
 // Enter = kirim, Shift+Enter = baris baru (seperti WA Web).
+// Saat picker @mention terbuka, tombol navigasi/pilih "ditelan" lebih dulu.
 $("sendInput").addEventListener("keydown", (e) => {
+  if (handleMentionKeydown(e)) return;
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     $("sendForm").requestSubmit();
@@ -1270,20 +1290,23 @@ $("sendInput").addEventListener("paste", (e) => {
 });
 
 async function sendTextMsg(text) {
+  const mentions = getComposeMentions();   // baca chip mention SEBELUM editor dibersihkan
   const quote = replyTo;          // snapshot lalu bersihkan bar reply
   clearReply();
   clearCompose();
+  closeMentionPicker();
   setBtnLoading($("sendBtn"), true);
   const box = $("messages");
   const tmpId = "tmp-" + Date.now();
+  const disp = mentionifyText(text);        // @nomor → @nama untuk tampilan
   // samakan dgn renderBubble: pesan tanpa kutipan yg isinya hanya emoji / emoticon BBM → tampil besar tanpa bubble
-  const bigCls = !quote ? (isEmojiOnly(text) ? " emoji-only" : isBbmOnly(text) ? " bbm-only" : "") : "";
+  const bigCls = !quote ? (isEmojiOnly(disp) ? " emoji-only" : isBbmOnly(disp) ? " bbm-only" : "") : "";
   box.insertAdjacentHTML("beforeend",
-    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-text="${escapeHtml(text)}" data-rtext="${escapeHtml(text)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(text)))}</div><div class="meta">mengirim…</div></div>`);
+    `<div class="bubble me pending${bigCls}" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-text="${escapeHtml(disp)}" data-rtext="${escapeHtml(disp)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="body">${bbmify(linkify(escapeHtml(disp)))}</div><div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
   scrollToBottom();
   try {
-    const res = await api("/api/send", { method: "POST", body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "" }) });
+    const res = await api("/api/send", { method: "POST", body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", mentions }) });
     finalizeBubble(tmpId, res.id);
     setTimeout(refreshNewest, 600);
   } catch (err) {
@@ -1298,10 +1321,13 @@ async function sendTextMsg(text) {
 }
 
 async function sendMediaMsg(caption) {
+  const mentions = caption ? getComposeMentions() : []; // chip mention di caption
   const { file, kind, url } = pendingFile;
   const jid = activeJid;
   const quote = replyTo;          // snapshot lalu bersihkan bar reply
+  const dispCap = mentionifyText(caption); // @nomor → @nama untuk tampilan
   clearReply();
+  closeMentionPicker();
   setBtnLoading($("sendBtn"), true);
   const box = $("messages");
   const tmpId = "tmp-" + Date.now();
@@ -1313,8 +1339,8 @@ async function sendMediaMsg(caption) {
   } else {
     mediaHTML = docChipHTML({ name: file.name, size: file.size, full: url });
   }
-  const capHTML = caption ? `<div class="body">${bbmify(linkify(escapeHtml(caption)))}</div>` : "";
-  const rtext = caption || (kind === "image" ? "📷 Foto" : kind === "video" ? "🎥 Video" : "📄 " + file.name);
+  const capHTML = caption ? `<div class="body">${bbmify(linkify(escapeHtml(dispCap)))}</div>` : "";
+  const rtext = dispCap || (kind === "image" ? "📷 Foto" : kind === "video" ? "🎥 Video" : "📄 " + file.name);
   box.insertAdjacentHTML("beforeend",
     `<div class="bubble me pending" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="${escapeHtml(rtext)}" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}${mediaHTML}${capHTML}<div class="meta">mengirim…</div></div>`);
   rebuildDaySeparators();
@@ -1328,7 +1354,7 @@ async function sendMediaMsg(caption) {
   setComposePlaceholder("Ketik pesan…");
 
   try {
-    const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", fileName: kind === "document" ? file.name : "" });
+    const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", fileName: kind === "document" ? file.name : "", mentions: mentions.join(",") });
     const fallbackType = kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "application/octet-stream";
     const res = await fetch("/api/send-media?" + qs.toString(), {
       method: "POST",
@@ -1580,6 +1606,128 @@ $("emojiGrid").addEventListener("click", (e) => {
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#emojiPanel") && !e.target.closest("#emojiBtn")) $("emojiPanel").classList.add("hidden");
+});
+
+// ---------- tag anggota grup (@mention) ----------
+// Muat daftar anggota grup aktif (untuk autocomplete @). Chat pribadi → kosong.
+async function loadGroupMembers(jid) {
+  groupMembers = [];
+  if (!jid || !jid.endsWith("@g.us")) return;
+  try {
+    const list = await api(`/api/group-members?jid=${encodeURIComponent(jid)}`);
+    if (activeJid === jid && Array.isArray(list)) groupMembers = list;
+  } catch (e) { /* fitur tag nonaktif utk grup ini bila gagal */ }
+}
+
+// "@<nomor>" → "@<nama>" memakai daftar anggota (untuk bubble optimistik; server juga
+// melakukannya via resolveMentions saat memuat ulang, jadi bubble tetap konsisten).
+function mentionifyText(text) {
+  if (!text || text.indexOf("@") < 0 || !groupMembers.length) return text;
+  return text.replace(/@(\d{5,})/g, (full, num) => {
+    const mb = groupMembers.find((x) => x.num === num);
+    return mb ? "@" + mb.name : full;
+  });
+}
+
+function closeMentionPicker() {
+  mentionState = null; mentionFiltered = []; mentionIdx = 0;
+  $("mentionPicker").classList.add("hidden");
+}
+
+// Cari token "@query" tepat sebelum kursor. Return { node, start, end, query } atau null.
+// Hanya cocok bila "@" di awal teks atau didahului spasi (hindari trigger pada email).
+function detectMentionToken() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  const node = sel.anchorNode;
+  if (!node || node.nodeType !== 3 || !$("sendInput").contains(node)) return null;
+  const offset = sel.anchorOffset;
+  const before = node.nodeValue.slice(0, offset);
+  const m = before.match(/(^|[\s ])@([^\s@ ]*)$/);
+  if (!m) return null;
+  const query = m[2];
+  return { node, start: offset - query.length - 1, end: offset, query };
+}
+
+function renderMentionPicker() {
+  const picker = $("mentionPicker");
+  if (!mentionFiltered.length) { picker.classList.add("hidden"); return; }
+  picker.innerHTML = mentionFiltered.map((mb, i) =>
+    `<button type="button" class="mention-item${i === mentionIdx ? " active" : ""}" data-i="${i}">` +
+      `<span class="mention-av" style="background:${avatarColor(mb.id)}">${escapeHtml(avatarInitials(mb.name, false))}</span>` +
+      `<span class="mention-name">${escapeHtml(mb.name)}</span>` +
+      `<span class="mention-num">${escapeHtml(mb.num)}</span>` +
+    `</button>`).join("");
+  picker.classList.remove("hidden");
+}
+
+// Dipanggil tiap input/gerak kursor: tampilkan/segarkan picker bila ada token "@".
+function updateMentionPicker() {
+  if (!activeJid || !activeJid.endsWith("@g.us") || !groupMembers.length) { closeMentionPicker(); return; }
+  const tok = detectMentionToken();
+  if (!tok) { closeMentionPicker(); return; }
+  const q = tok.query.toLowerCase();
+  mentionFiltered = groupMembers
+    .filter((mb) => !q || mb.name.toLowerCase().includes(q) || mb.num.includes(q))
+    .slice(0, 8);
+  if (!mentionFiltered.length) { closeMentionPicker(); return; }
+  mentionState = { node: tok.node, start: tok.start, end: tok.end };
+  mentionIdx = 0;
+  renderMentionPicker();
+}
+
+// Sisipkan chip mention (non-editable, atomik) menggantikan token "@query".
+function insertMention(mb) {
+  if (!mb) return;
+  const st = mentionState;
+  const root = $("sendInput");
+  root.focus();
+  const range = document.createRange();
+  try {
+    if (st && root.contains(st.node)) {
+      range.setStart(st.node, Math.max(0, st.start));
+      range.setEnd(st.node, Math.min(st.node.nodeValue.length, st.end));
+    } else { range.selectNodeContents(root); range.collapse(false); }
+  } catch (e) { range.selectNodeContents(root); range.collapse(false); }
+  range.deleteContents();
+  const chip = document.createElement("span");
+  chip.className = "mention";
+  chip.contentEditable = "false";
+  chip.dataset.jid = mb.id;
+  chip.dataset.num = mb.num;
+  chip.textContent = "@" + mb.name;
+  range.insertNode(chip);
+  const space = document.createTextNode(" ");
+  chip.after(space);
+  const after = document.createRange();
+  after.setStartAfter(space); after.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(after);
+  closeMentionPicker();
+}
+
+// Navigasi keyboard saat picker terbuka. Return true bila tombol "ditelan".
+function handleMentionKeydown(e) {
+  if ($("mentionPicker").classList.contains("hidden") || !mentionFiltered.length) return false;
+  if (e.key === "ArrowDown") { mentionIdx = (mentionIdx + 1) % mentionFiltered.length; renderMentionPicker(); e.preventDefault(); return true; }
+  if (e.key === "ArrowUp") { mentionIdx = (mentionIdx - 1 + mentionFiltered.length) % mentionFiltered.length; renderMentionPicker(); e.preventDefault(); return true; }
+  if (e.key === "Enter" || e.key === "Tab") { insertMention(mentionFiltered[mentionIdx]); e.preventDefault(); return true; }
+  if (e.key === "Escape") { closeMentionPicker(); e.preventDefault(); return true; }
+  return false;
+}
+
+$("sendInput").addEventListener("input", updateMentionPicker);
+$("sendInput").addEventListener("keyup", (e) => {
+  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) updateMentionPicker();
+});
+$("sendInput").addEventListener("click", updateMentionPicker);
+$("mentionPicker").addEventListener("mousedown", (e) => e.preventDefault()); // jaga fokus editor
+$("mentionPicker").addEventListener("click", (e) => {
+  const b = e.target.closest(".mention-item");
+  if (b) insertMention(mentionFiltered[Number(b.dataset.i)]);
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#mentionPicker") && !e.target.closest("#sendInput")) closeMentionPicker();
 });
 
 // ---------- boot ----------
