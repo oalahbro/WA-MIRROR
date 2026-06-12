@@ -138,11 +138,14 @@ app.get("/api/chats", requireAuth, (req, res) => {
 });
 
 // Pesan terbaru -> lama. ?before=<epoch> untuk load yang lebih lama (scroll ke atas).
+// ?after=<epoch> untuk load yang lebih BARU (scroll ke bawah saat loncat ke pesan lama).
 app.get("/api/messages", requireAuth, (req, res) => {
   const jid = req.query.jid;
   if (!jid) return res.status(400).json({ error: "jid wajib" });
-  const before = parseInt(req.query.before, 10) || 0;
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+  const after = parseInt(req.query.after, 10) || 0;
+  if (after) return res.json(store.getMessagesNewer(jid, after, limit));
+  const before = parseInt(req.query.before, 10) || 0;
   res.json(store.getMessages(jid, before, limit));
 });
 

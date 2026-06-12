@@ -11,6 +11,7 @@ let chatsLoadedOnce = false;
 let lastStats = { chats: -1, messages: -1 };
 let lastConnState = "";   // untuk toast transisi koneksi
 let loadingOlder = false;
+let loadingNewer = false;
 let jumpedToHistory = false; // true saat sedang lihat potongan riwayat lama (hasil cari) → poll dipause, tombol ↓ = balik ke live
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
 let myJidLid = "";        // jid LID akun sendiri (di grup) — untuk deteksi "Kamu"
@@ -423,7 +424,36 @@ async function loadAround(jid, ts) {
     $("messages").innerHTML = "";
     renderMessages(batch, false);
     showJump(false);               // tampilkan tombol ↓ sebagai "kembali ke live"
+    await loadNewer();             // muat sebagian pesan SETELAH target → konteks ke bawah
   } catch (e) { /* biarkan; cadangan loadOlder menyusul */ }
+}
+
+// Muat pesan LEBIH BARU dari yang terbawah (saat mode riwayat). Append di bawah. Bila batch
+// kurang dari limit = sudah nyusul live → keluar mode riwayat & lanjutkan polling.
+async function loadNewer() {
+  if (!activeJid || !jumpedToHistory || loadingNewer) return;
+  loadingNewer = true;
+  const jid = activeJid, box = $("messages");
+  const bubbles = box.querySelectorAll(".bubble");
+  const lastTs = bubbles.length ? Number(bubbles[bubbles.length - 1].dataset.ts) : 0;
+  const LIMIT = 50;
+  try {
+    const newer = await api(`/api/messages?jid=${encodeURIComponent(jid)}&after=${lastTs}&limit=${LIMIT}`);
+    if (activeJid !== jid) return;
+    const existing = new Set([...box.querySelectorAll(".bubble")].map((b) => b.dataset.id));
+    const toAdd = newer.filter((m) => !existing.has(m.id)); // newer sudah ASC (lama→baru)
+    if (toAdd.length) {
+      box.insertAdjacentHTML("beforeend", toAdd.map(renderBubble).join(""));
+      rebuildDaySeparators();
+    }
+    if (newer.length < LIMIT) {           // tak ada lagi yg lebih baru → sudah live
+      jumpedToHistory = false;
+      clearInterval(msgPollTimer);
+      msgPollTimer = setInterval(refreshNewest, 3000);
+      updateJump();
+    }
+  } catch (e) { /* abaikan; bisa dicoba lagi saat scroll */ }
+  finally { loadingNewer = false; }
 }
 function locateBubble(id) {
   let el = null;
@@ -1139,6 +1169,8 @@ $("messages").addEventListener("scroll", () => {
     const lo = box.querySelector(".load-older");
     if (lo && lo.textContent.startsWith("↑")) loadOlder();
   }
+  // mode riwayat: dekat dasar → muat pesan lebih baru (lanjut ke bawah sampai nyusul live)
+  if (jumpedToHistory && box.scrollHeight - box.scrollTop - box.clientHeight < 80) loadNewer();
   updateJump();
 });
 

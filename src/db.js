@@ -149,6 +149,23 @@ const _getMessages = db.prepare(`
   LIMIT @limit
 `);
 
+// Pesan LEBIH BARU dari cursor `after` (untuk lanjut ke bawah saat loncat ke pesan lama
+// hasil cari). ASC = yang tepat setelah target dulu. Kolom sama dengan _getMessages.
+const _getMessagesNewer = db.prepare(`
+  SELECT m.id, m.sender,
+         COALESCE(NULLIF(ct.name, ''), m.sender) AS sender_name,
+         m.from_me, m.text, m.type, m.timestamp, m.thumb,
+         m.quoted_id, m.quoted_text, m.quoted_sender,
+         COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
+         m.media_mime, m.file_name, m.file_size, m.edited
+  FROM messages m
+  LEFT JOIN contacts ct ON ct.jid = m.sender
+  LEFT JOIN contacts qc ON qc.jid = m.quoted_sender
+  WHERE m.chat_jid = @jid AND m.timestamp > @after
+  ORDER BY m.timestamp ASC
+  LIMIT @limit
+`);
+
 const _getMediaInfo = db.prepare(
   `SELECT type, media_mime, file_name FROM messages WHERE chat_jid = @jid AND id = @id`
 );
@@ -264,6 +281,16 @@ function getMessages(jid, before, limit = 50) {
   return rows;
 }
 
+// Pesan lebih baru dari `after` (epoch), urut ASC. Dipakai loncat-ke-pesan-lama lalu lanjut ke bawah.
+function getMessagesNewer(jid, after, limit = 50) {
+  const rows = _getMessagesNewer.all({ jid, after: after || 0, limit });
+  for (const r of rows) {
+    if (r.text) r.text = resolveMentions(r.text);
+    if (r.quoted_text) r.quoted_text = resolveMentions(r.quoted_text);
+  }
+  return rows;
+}
+
 function getMediaInfo(jid, id) {
   return _getMediaInfo.get({ jid, id });
 }
@@ -350,6 +377,7 @@ module.exports = {
   setPin,
   markRead,
   getMessages,
+  getMessagesNewer,
   getMediaInfo,
   getMessageById,
   editMessageText,
