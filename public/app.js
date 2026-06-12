@@ -493,12 +493,16 @@ function setFilterCount(filter, n) {
   else el.classList.add("hidden");
 }
 
-// Avatar: img sukses → tampilkan (.ok); gagal/404 → sembunyikan, inisial tetap terlihat.
-// Pakai fase CAPTURE (event load/error tak bubble). Inline handler dihindari (CSP).
+// Avatar: img foto asli → tampilkan (.ok); "tanpa foto" (server kirim sentinel PNG 1x1,
+// naturalWidth<=1) atau error → sembunyikan, inisial tetap terlihat. Server tak lagi balas
+// 404 untuk avatar kosong supaya console browser bersih. Pakai fase CAPTURE (load/error tak
+// bubble). Inline handler dihindari (CSP).
 function wireAvatarLoaders(container) {
   container.addEventListener("load", (e) => {
     const t = e.target;
-    if (t.classList && t.classList.contains("avatar-img")) t.classList.add("ok");
+    if (!t.classList || !t.classList.contains("avatar-img")) return;
+    if (t.naturalWidth <= 1) { t.classList.remove("ok"); t.style.display = "none"; } // sentinel = tanpa foto
+    else { t.style.display = ""; t.classList.add("ok"); }
   }, true);
   container.addEventListener("error", (e) => {
     const t = e.target;

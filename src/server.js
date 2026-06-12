@@ -27,6 +27,18 @@ fs.mkdirSync(AVATAR_DIR, { recursive: true });
 const AVATAR_TTL = 30 * 24 * 3600 * 1000;
 const AVATAR_NEG_TTL = 6 * 3600 * 1000;
 const noAvatar = new Map();           // jid -> epoch ms kedaluwarsa entry negatif
+// PNG transparan 1x1 untuk kasus "tanpa foto/privasi": dikirim 200 (BUKAN 404) supaya
+// <img> tidak memunculkan error 404 di console browser. Frontend mendeteksi sentinel ini
+// via naturalWidth<=1 → sembunyikan img, inisial tetap tampil.
+const BLANK_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64"
+);
+function sendNoAvatar(res) {
+  res.type("image/png");
+  res.setHeader("Cache-Control", "private, max-age=21600"); // 6 jam (samakan dgn negative-cache)
+  res.send(BLANK_PNG);
+}
 let avActive = 0;
 const avQueue = [];
 const AV_MAX = 3;                     // maksimal fetch avatar paralel ke WA
@@ -241,9 +253,9 @@ app.get("/api/avatar", requireAuth, async (req, res) => {
     }
   } catch (e) { /* belum ada cache */ }
 
-  // 2) negative-cache: diketahui tak ada foto → 404 cepat tanpa panggil WA
+  // 2) negative-cache: diketahui tak ada foto → kirim sentinel cepat tanpa panggil WA
   const neg = noAvatar.get(jid);
-  if (neg && neg > Date.now()) return res.status(404).end();
+  if (neg && neg > Date.now()) return sendNoAvatar(res);
 
   // 3) ambil dari WA (dibatasi AV_MAX paralel)
   const buf = await avRun(async () => {
@@ -255,7 +267,7 @@ app.get("/api/avatar", requireAuth, async (req, res) => {
   });
   if (!buf || !buf.length) {
     noAvatar.set(jid, Date.now() + AVATAR_NEG_TTL);
-    return res.status(404).end();
+    return sendNoAvatar(res);
   }
   fs.writeFile(file, buf, () => {});
   res.type("image/jpeg");
