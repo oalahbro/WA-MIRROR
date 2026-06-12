@@ -11,6 +11,7 @@ let chatsLoadedOnce = false;
 let lastStats = { chats: -1, messages: -1 };
 let lastConnState = "";   // untuk toast transisi koneksi
 let loadingOlder = false;
+let jumpedToHistory = false; // true saat sedang lihat potongan riwayat lama (hasil cari) → poll dipause, tombol ↓ = balik ke live
 let myJid = "";           // jid akun sendiri (untuk label "Kamu" pada kutipan)
 let myJidLid = "";        // jid LID akun sendiri (di grup) — untuk deteksi "Kamu"
 let replyTo = null;       // { id, sender, text } pesan yang sedang dibalas
@@ -361,7 +362,7 @@ async function runMsgSearch(q) {
   if (!results.length) { renderSearchShell(`<div class="list-msg">Tidak ada pesan cocok.</div>`, 0); return; }
   const items = results.map((r) => {
     const who = r.from_me ? "Kamu: " : (r.is_group && r.sender_name ? escapeHtml(r.sender_name) + ": " : "");
-    return `<div class="search-result" data-jid="${escapeHtml(r.jid)}" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.chat_name)}">
+    return `<div class="search-result" data-jid="${escapeHtml(r.jid)}" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.chat_name)}" data-ts="${r.timestamp}">
       <div class="sr-row"><span class="sr-name">${escapeHtml(r.chat_name)}${r.is_group ? " 👥" : ""}</span><span class="sr-time">${fmtTime(r.timestamp)}</span></div>
       <div class="sr-snippet">${who}${bbmify(highlightSnippet(r.text, q))}</div></div>`;
   }).join("");
@@ -389,19 +390,40 @@ function exitMsgSearch() {
 $("chatList").addEventListener("click", (e) => {
   if (e.target.closest(".search-exit")) { exitMsgSearch(); return; }
   const r = e.target.closest(".search-result[data-jid]");
-  if (r) openChatToMessage(r.dataset.jid, r.dataset.name, r.dataset.id);
+  if (r) openChatToMessage(r.dataset.jid, r.dataset.name, r.dataset.id, Number(r.dataset.ts) || 0);
 });
-// Buka chat lalu loncat ke pesan hasil pencarian (muat lebih lama bila perlu).
-async function openChatToMessage(jid, name, id) {
+// Buka chat lalu loncat ke pesan hasil pencarian. Untuk pesan lama, muat langsung
+// jendela di sekitar timestamp-nya (1 panggilan) — bukan scroll dari bawah berkali-kali
+// (yang gagal untuk pesan jauh, mis. bulan lalu di grup ramai).
+async function openChatToMessage(jid, name, id, ts) {
   msgSearchMode = false; msgSearchQuery = ""; $("search").value = "";
   await openChat(jid, name);
-  for (let i = 0; i < 8; i++) {
-    if (locateBubble(id)) return;
+  if (locateBubble(id)) return;                 // pesan ada di batch terbaru
+  if (ts) await loadAround(jid, ts);            // muat jendela tepat di sekitar pesan
+  if (locateBubble(id)) return;
+  // cadangan: bila ts meleset / tak ada, gulir ke atas beberapa kali
+  for (let i = 0; i < 6 && !locateBubble(id); i++) {
     const lo = $("messages").querySelector(".load-older");
     if (!lo || lo.classList.contains("done")) break;
     await loadOlder();
   }
-  if (!locateBubble(id)) toast("Pesan cukup lama — gulir ke atas untuk memuat lagi");
+  if (!locateBubble(id)) toast("Pesan tidak ditemukan — mungkin sudah terhapus");
+}
+
+// Muat satu jendela pesan yang memuat pesan dengan timestamp `ts` (target jadi pesan paling
+// bawah batch, pesan lebih lama di atasnya). Polling dihentikan supaya refreshNewest tidak
+// menempelkan pesan terbaru (yang akan bikin lompatan tak nyambung). Tombol ↓ = kembali ke live.
+async function loadAround(jid, ts) {
+  try {
+    const batch = await api(`/api/messages?jid=${encodeURIComponent(jid)}&before=${ts + 1}&limit=50`);
+    if (activeJid !== jid || !batch.length) return;
+    clearInterval(msgPollTimer);   // berhenti poll → tak ada pesan terbaru yang ditempel
+    jumpedToHistory = true;
+    oldestLoaded = 0;              // reset cursor; renderMessages akan set ulang dari batch
+    $("messages").innerHTML = "";
+    renderMessages(batch, false);
+    showJump(false);               // tampilkan tombol ↓ sebagai "kembali ke live"
+  } catch (e) { /* biarkan; cadangan loadOlder menyusul */ }
 }
 function locateBubble(id) {
   let el = null;
@@ -494,6 +516,7 @@ $("chatList").addEventListener("touchcancel", endSwipePin);
 async function openChat(jid, title) {
   activeJid = jid;
   oldestLoaded = 0;
+  jumpedToHistory = false;   // buka chat normal = mode live (poll jalan)
   $("app").classList.add("chat-open");   // mobile: geser ke tampilan percakapan
   $("convEmpty").classList.add("hidden");
   $("convView").classList.remove("hidden");
@@ -545,6 +568,7 @@ function backToList() {
   clearInterval(msgPollTimer);
   activeJid = null;          // lepas active → badge unread jalan normal lagi
   groupMembers = [];
+  jumpedToHistory = false;
   closeMentionPicker();
   renderChats();
 }
@@ -1097,11 +1121,16 @@ function hideJump() { $("jumpBtn").classList.add("hidden"); $("jumpDot").classLi
 function showJump(newMsg) { $("jumpBtn").classList.remove("hidden"); if (newMsg) $("jumpDot").classList.remove("hidden"); }
 // Tampilkan tombol gulir-ke-bawah kapan pun user tidak di dekat dasar chat.
 function updateJump() {
+  if (jumpedToHistory) { $("jumpBtn").classList.remove("hidden"); return; } // selalu tampil = balik ke live
   const box = $("messages");
   if (box.scrollHeight - box.scrollTop - box.clientHeight > 200) $("jumpBtn").classList.remove("hidden");
   else hideJump();
 }
-$("jumpBtn").onclick = scrollToBottom;
+$("jumpBtn").onclick = () => {
+  // Saat lihat potongan riwayat lama (hasil cari), ↓ = muat ulang chat ke pesan terbaru (live).
+  if (jumpedToHistory) { jumpedToHistory = false; openChat(activeJid, $("convTitle").textContent); return; }
+  scrollToBottom();
+};
 
 // load lebih lama saat scroll ke paling atas + atur tampil/sembunyi tombol gulir
 $("messages").addEventListener("scroll", () => {
