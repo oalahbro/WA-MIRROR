@@ -1667,9 +1667,10 @@ function updateMentionPicker() {
   const tok = detectMentionToken();
   if (!tok) { closeMentionPicker(); return; }
   const q = tok.query.toLowerCase();
+  // Tampilkan SEMUA anggota yang cocok (picker scrollable, max-height 240px).
+  // Tanpa query (baru ketik "@") = seluruh anggota grup, urut nama.
   mentionFiltered = groupMembers
-    .filter((mb) => !q || mb.name.toLowerCase().includes(q) || mb.num.includes(q))
-    .slice(0, 8);
+    .filter((mb) => !q || mb.name.toLowerCase().includes(q) || mb.num.includes(q));
   if (!mentionFiltered.length) { closeMentionPicker(); return; }
   mentionState = { node: tok.node, start: tok.start, end: tok.end };
   mentionIdx = 0;
