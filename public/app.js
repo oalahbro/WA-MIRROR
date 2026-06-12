@@ -682,7 +682,7 @@ function rebuildDaySeparators() {
     }
   });
 }
-const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "📄 Dokumen" };
+const PLACEHOLDER_TEXT = { image: "📷 Foto", video: "🎥 Video", document: "📄 Dokumen", sticker: "🌟 Stiker" };
 
 // Jadikan URL & "www." pada teks (SUDAH di-escape) sebagai tautan yang bisa diklik.
 // Aman: dijalankan pada string ter-escape, jadi tak ada injeksi. Tanda baca di ujung dipangkas.
@@ -815,6 +815,10 @@ function renderBubble(m) {
       mediaHTML = `<div class="media-video" data-full="${escapeHtml(full)}" data-kind="video"><img class="media" loading="lazy" src="${src}" alt=""><span class="play">▶</span></div>`;
     }
     if (bodyText === PLACEHOLDER_TEXT[m.type]) bodyText = ""; // jangan tampilkan placeholder sbg caption
+  } else if (m.type === "sticker") {
+    const full = `/api/media?jid=${encodeURIComponent(activeJid)}&id=${encodeURIComponent(m.id)}&token=${encodeURIComponent(TOKEN)}`;
+    mediaHTML = `<div class="sticker"><img class="sticker-img" loading="lazy" src="${full}" alt="stiker"></div>`;
+    bodyText = ""; // jangan tampilkan "🌟 Stiker"
   }
   const bodyHTML = bodyText ? `<div class="body">${bbmify(linkify(escapeHtml(bodyText)))}</div>` : "";
   // pesan yang isinya hanya emoji → tampil besar tanpa bubble (ala WA)
@@ -832,7 +836,7 @@ function renderBubble(m) {
   const replyPreview = bodyText || PLACEHOLDER_TEXT[m.type] || m.text || "";
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
-  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}${m.type === "sticker" ? " sticker-msg" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
     <button class="menu-btn" title="Menu pesan">⋮</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
     <div class="meta">${m.edited ? "diedit · " : ""}${fmtTime(m.timestamp)}</div>
@@ -869,7 +873,12 @@ $("messages").addEventListener("load", (e) => {
   if (e.target.classList && e.target.classList.contains("media-loader")) imgLoaded(e.target);
 }, true);
 $("messages").addEventListener("error", (e) => {
-  if (e.target.classList && e.target.classList.contains("media-loader")) imgFailed(e.target);
+  const t = e.target;
+  if (t.classList && t.classList.contains("media-loader")) imgFailed(t);
+  else if (t.classList && t.classList.contains("sticker-img")) {
+    const wrap = t.closest(".sticker");          // stiker lama (tanpa raw) / kedaluwarsa
+    if (wrap) wrap.innerHTML = `<div class="sticker-fallback">🌟 Stiker</div>`;
+  }
 }, true);
 
 // ---------- menu konteks pesan (klik-kanan / long-press) ----------
@@ -877,9 +886,11 @@ function openMsgMenu(b, x, y) {
   const id = b.dataset.id, name = b.dataset.rsender || "", text = b.dataset.rtext || "", sender = b.dataset.sender || "";
   const fromMe = b.classList.contains("me");
   const inGroup = activeJid && activeJid.endsWith("@g.us");
+  const isSticker = b.classList.contains("sticker-msg");
   const items = [];
-  if (text) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
+  if (text && !isSticker) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
   items.push({ label: "↩️ Balas", act: () => startReply(id, name, text) });
+  if (isSticker) items.push({ label: "⭐ Simpan stiker", act: () => saveSticker(activeJid, id) });
   // Edit: hanya pesan SENDIRI, berupa teks (tanpa media), & masih < 15 menit (batas WhatsApp).
   const ts = Number(b.dataset.ts) || 0;
   const hasMedia = b.querySelector(".media-img, .media-video, .doc-chip");
@@ -1650,6 +1661,7 @@ function toggleEmojiPanel() {
   const panel = $("emojiPanel");
   const willOpen = panel.classList.contains("hidden");
   if (willOpen) {
+    $("stickerPanel").classList.add("hidden");
     if (!emojiBuilt) { buildEmojiTabs(); emojiBuilt = true; }
     if (recentEmojis().length) emojiCat = "recent";
     else if (emojiCat === "recent") emojiCat = "smileys";
@@ -1672,6 +1684,81 @@ $("emojiGrid").addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#emojiPanel") && !e.target.closest("#emojiBtn")) $("emojiPanel").classList.add("hidden");
 });
+
+// ---------- stiker (tampilkan masuk + favorit) ----------
+// Simpan stiker yang masuk ke favorit (server unduh WebP-nya lalu cache by hash).
+async function saveSticker(jid, id) {
+  toast("Menyimpan stiker…", "", 1200);
+  try {
+    const r = await api("/api/sticker/save", { method: "POST", body: JSON.stringify({ jid, id }) });
+    if (r && r.ok) toast("Stiker disimpan ke favorit ⭐", "ok", 1600);
+    else toast((r && r.error) || "Gagal simpan stiker", "err");
+  } catch (e) { toast("Gagal simpan stiker", "err"); }
+}
+
+function toggleStickerPanel() {
+  const panel = $("stickerPanel");
+  const willOpen = panel.classList.contains("hidden");
+  if (willOpen) { $("emojiPanel").classList.add("hidden"); loadStickerPanel(); }
+  panel.classList.toggle("hidden");
+}
+
+async function loadStickerPanel() {
+  const grid = $("stickerGrid");
+  grid.innerHTML = `<div class="sticker-empty">Memuat…</div>`;
+  let list;
+  try { list = await api("/api/stickers"); } catch (e) { grid.innerHTML = `<div class="sticker-empty">Gagal memuat.</div>`; return; }
+  if (!Array.isArray(list) || !list.length) {
+    grid.innerHTML = `<div class="sticker-empty">Belum ada stiker favorit.<br>Simpan dari stiker yang masuk: menu ⋮ pada stiker → Simpan stiker.</div>`;
+    return;
+  }
+  grid.innerHTML = list.map((s) =>
+    `<div class="sticker-cell" data-hash="${escapeHtml(s.hash)}" title="Kirim stiker">` +
+      `<img loading="lazy" src="/api/sticker?hash=${encodeURIComponent(s.hash)}&token=${encodeURIComponent(TOKEN)}" alt="stiker">` +
+      `<button type="button" class="sticker-rm" title="Hapus dari favorit">✕</button>` +
+    `</div>`).join("");
+}
+
+$("stickerBtn").onclick = (e) => { e.stopPropagation(); toggleStickerPanel(); };
+$("stickerGrid").addEventListener("click", (e) => {
+  const rm = e.target.closest(".sticker-rm");
+  if (rm) { e.stopPropagation(); const cell = rm.closest(".sticker-cell"); if (cell) removeStickerFav(cell.dataset.hash, cell); return; }
+  const cell = e.target.closest(".sticker-cell");
+  if (cell) sendStickerFav(cell.dataset.hash);
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#stickerPanel") && !e.target.closest("#stickerBtn")) $("stickerPanel").classList.add("hidden");
+});
+
+async function removeStickerFav(hash, cell) {
+  try {
+    await api("/api/sticker/remove", { method: "POST", body: JSON.stringify({ hash }) });
+    cell.remove();
+    if (!$("stickerGrid").querySelector(".sticker-cell")) loadStickerPanel(); // tampilkan empty state
+  } catch (e) { toast("Gagal hapus stiker", "err"); }
+}
+
+async function sendStickerFav(hash) {
+  if (!activeJid) return;
+  const jid = activeJid;
+  const quote = replyTo; clearReply();
+  const url = `/api/sticker?hash=${encodeURIComponent(hash)}&token=${encodeURIComponent(TOKEN)}`;
+  const box = $("messages");
+  const tmpId = "tmp-" + Date.now();
+  box.insertAdjacentHTML("beforeend",
+    `<div class="bubble me pending sticker-msg" data-ts="${Math.floor(Date.now()/1000)}" data-id="${tmpId}" data-rtext="🌟 Stiker" data-rsender="Kamu"><button class="menu-btn" title="Menu pesan">⋮</button>${quoteBlockHTML(quote)}<div class="sticker"><img class="sticker-img" src="${url}" alt="stiker"></div><div class="meta">mengirim…</div></div>`);
+  rebuildDaySeparators();
+  scrollToBottom();
+  try {
+    const res = await api("/api/sticker/send", { method: "POST", body: JSON.stringify({ jid, hash, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "" }) });
+    finalizeBubble(tmpId, res.id);
+    setTimeout(refreshNewest, 600);
+  } catch (e) {
+    removeBubble(tmpId);
+    if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid);
+    toast("Gagal kirim stiker: " + e.message, "err");
+  }
+}
 
 // ---------- tag anggota grup (@mention) ----------
 // Muat daftar anggota grup aktif (untuk autocomplete @). Chat pribadi → kosong.

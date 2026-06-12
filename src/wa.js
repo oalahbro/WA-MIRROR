@@ -106,6 +106,7 @@ function extractMedia(message) {
   const m = message;
   if (m.imageMessage) return { node: m.imageMessage, mime: m.imageMessage.mimetype || "image/jpeg" };
   if (m.videoMessage) return { node: m.videoMessage, mime: m.videoMessage.mimetype || "video/mp4" };
+  if (m.stickerMessage) return { node: m.stickerMessage, mime: m.stickerMessage.mimetype || "image/webp" };
   if (m.ephemeralMessage) return extractMedia(m.ephemeralMessage.message);
   if (m.viewOnceMessage) return extractMedia(m.viewOnceMessage.message);
   if (m.viewOnceMessageV2) return extractMedia(m.viewOnceMessageV2.message);
@@ -211,7 +212,7 @@ function storeWAMessage(waMsg) {
   // restart). WebMessageInfo hanya berisi metadata + kunci media, BUKAN byte berkasnya,
   // jadi 'raw' tetap kecil meski dokumennya besar.
   let thumb = "", media_mime = "", raw = "", file_name = "", file_size = 0;
-  if (type === "image" || type === "video" || type === "document") {
+  if (type === "image" || type === "video" || type === "document" || type === "sticker") {
     if (type === "document") {
       const doc = extractDoc(waMsg.message);
       if (doc) {
@@ -573,6 +574,18 @@ async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileNam
   return sent?.key?.id || null;
 }
 
+// Kirim stiker (buffer WebP — mis. dari favorit yang tersimpan; sudah format stiker WA
+// jadi tak perlu konversi). Bisa membalas pesan lain (quotedId).
+async function sendSticker(jid, buffer, quotedId, quotedJid) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!buffer || !buffer.length) throw new Error("stiker kosong");
+  const opts = {};
+  const quoted = buildQuoted(jid, quotedId, quotedJid);
+  if (quoted) opts.quoted = quoted;
+  const sent = await sock.sendMessage(jid, { sticker: buffer }, opts);
+  return sent?.key?.id || null;
+}
+
 // Download & dekripsi media resolusi penuh berdasarkan id pesan.
 // Sumber pesan: cache memori dulu, lalu fallback ke 'raw' tersimpan di DB
 // (didekode dari WebMessageInfo) agar tetap bisa lintas restart.
@@ -686,7 +699,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
+module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

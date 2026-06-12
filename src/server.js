@@ -5,6 +5,7 @@ require("./loadenv");
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const store = require("./db");
 const wa = require("./wa");
 
@@ -19,6 +20,11 @@ const MEDIA_DIR = path.resolve(__dirname, "../data/media");
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const safeName = (id) => String(id).replace(/[^A-Za-z0-9_-]/g, "_");
 const AUTH_TOKEN = process.env.AUTH_TOKEN || "";
+
+// Folder stiker favorit (WebP). Disimpan dengan nama = hash isi (dedupe stiker identik).
+const STICKER_DIR = path.resolve(__dirname, "../data/stickers");
+fs.mkdirSync(STICKER_DIR, { recursive: true });
+const stickerFile = (hash) => path.join(STICKER_DIR, safeName(hash) + ".webp");
 
 // Folder cache foto profil (avatar). TTL disk 30 hari; negative-cache (jid tanpa foto)
 // 6 jam agar tidak terus memanggil WA. Fetch ke WA dibatasi konkurensinya (anti ban).
@@ -332,6 +338,71 @@ app.post(
     }
   }
 );
+
+// ---------- stiker favorit ----------
+// Simpan stiker yang masuk ke favorit. Body { jid, id } → download WebP → hash → tulis file.
+app.post("/api/sticker/save", requireAuth, async (req, res) => {
+  const { jid, id } = req.body || {};
+  if (!jid || !id) return res.status(400).json({ error: "jid & id wajib" });
+  try {
+    const result = await wa.downloadMedia(jid, id);
+    if (!result || !result.buffer || !result.buffer.length) {
+      return res.status(404).json({ error: "stiker tidak tersedia (mungkin sudah kedaluwarsa)" });
+    }
+    const hash = crypto.createHash("sha256").update(result.buffer).digest("hex").slice(0, 24);
+    fs.writeFileSync(stickerFile(hash), result.buffer);
+    res.json({ ok: true, hash });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Daftar stiker favorit (hash + waktu simpan), terbaru dulu.
+app.get("/api/stickers", requireAuth, (req, res) => {
+  let files;
+  try { files = fs.readdirSync(STICKER_DIR).filter((f) => f.endsWith(".webp")); } catch (e) { files = []; }
+  const list = files.map((f) => {
+    const hash = f.replace(/\.webp$/, "");
+    let at = 0;
+    try { at = fs.statSync(path.join(STICKER_DIR, f)).mtimeMs; } catch (e) {}
+    return { hash, at };
+  }).sort((a, b) => b.at - a.at);
+  res.json(list);
+});
+
+// Sajikan WebP stiker favorit. ?hash= (token boleh via query agar bisa dipakai di <img src>).
+app.get("/api/sticker", requireAuth, (req, res) => {
+  const hash = req.query.hash;
+  if (!hash) return res.status(400).json({ error: "hash wajib" });
+  const file = stickerFile(hash);
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.type("image/webp");
+  res.setHeader("Cache-Control", "private, max-age=604800"); // 7 hari (isi stiker tetap = hash)
+  fs.createReadStream(file).pipe(res);
+});
+
+// Hapus stiker favorit. Body { hash }.
+app.post("/api/sticker/remove", requireAuth, (req, res) => {
+  const { hash } = req.body || {};
+  if (!hash) return res.status(400).json({ error: "hash wajib" });
+  try { fs.unlinkSync(stickerFile(hash)); } catch (e) { /* sudah tak ada */ }
+  res.json({ ok: true });
+});
+
+// Kirim stiker favorit ke sebuah chat. Body { jid, hash, quotedId, quotedJid }.
+app.post("/api/sticker/send", requireAuth, async (req, res) => {
+  const { jid, hash, quotedId, quotedJid } = req.body || {};
+  if (!jid || !hash) return res.status(400).json({ error: "jid & hash wajib" });
+  const file = stickerFile(hash);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: "stiker tidak ada" });
+  try {
+    const buf = fs.readFileSync(file);
+    const id = await wa.sendSticker(jid, buf, quotedId, quotedJid);
+    res.json({ ok: true, id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ---------- static UI ----------
 app.use(express.static(path.resolve(__dirname, "../public")));
