@@ -160,9 +160,12 @@ function findContextInfo(message) {
 function findProtocolMsg(message) {
   if (!message) return null;
   if (message.protocolMessage) return message.protocolMessage;
+  // deviceSentMessage = pesan dari device kita yang lain (mis. edit/hapus dari HP sendiri).
+  if (message.deviceSentMessage?.message) return findProtocolMsg(message.deviceSentMessage.message);
   if (message.editedMessage?.message) return findProtocolMsg(message.editedMessage.message);
   if (message.ephemeralMessage?.message) return findProtocolMsg(message.ephemeralMessage.message);
   if (message.viewOnceMessage?.message) return findProtocolMsg(message.viewOnceMessage.message);
+  if (message.viewOnceMessageV2?.message) return findProtocolMsg(message.viewOnceMessageV2.message);
   return null;
 }
 
@@ -468,6 +471,11 @@ async function start() {
   // Pesan masuk / keluar real-time
   sock.ev.on("messages.upsert", ({ messages, type }) => {
     for (const m of messages) {
+      // DIAGNOSTIK: tampilkan struktur pesan yg mengandung protocol/edit/deviceSent.
+      const _k = m.message ? Object.keys(m.message) : [];
+      if (_k.some((k) => k === "protocolMessage" || k === "editedMessage" || k === "deviceSentMessage")) {
+        console.log(`[wa][DIAG] fromMe=${m.key?.fromMe} keys=${_k.join(",")} json=${JSON.stringify(m.message).slice(0, 800)}`);
+      }
       // Edit / hapus bisa datang sbg protocolMessage di sini (mis. edit dari HP) ATAU sbg
       // messages.update (mis. dari WA Web). Tangani di kedua jalur supaya tak ada yg lewat
       // (idempoten bila kena dua-duanya).
