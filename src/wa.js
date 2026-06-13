@@ -476,11 +476,13 @@ async function start() {
       if (pm && pm.key?.id && tgt) {
         if (pm.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT) {
           const { text } = extractContent(pm.editedMessage || {});
-          if (text) store.editMessageText(tgt, pm.key.id, text);
+          const rows = text ? store.editMessageText(tgt, pm.key.id, text) : 0;
+          console.log(`[wa] edit(upsert) id=${pm.key.id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 40))}`);
           continue;
         }
         if (pm.type === proto.Message.ProtocolMessage.Type.REVOKE) {
           store.markDeleted(tgt, pm.key.id);
+          console.log(`[wa] hapus(upsert) id=${pm.key.id}`);
           continue;
         }
       }
@@ -511,7 +513,8 @@ async function start() {
       const em = u.update?.message?.editedMessage?.message;
       if (!em) continue;
       const { text } = extractContent(em);
-      if (text) store.editMessageText(jid, id, text);
+      const rows = text ? store.editMessageText(jid, id, text) : 0;
+      console.log(`[wa] edit(update) id=${id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 40))}`);
     }
   });
 
