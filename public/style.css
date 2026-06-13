@@ -445,6 +445,8 @@ body {
 }
 .msg-menu button:hover { background: var(--hover); }
 .bubble .meta { font-size: 10.5px; color: var(--muted); text-align: right; margin-top: 2px; }
+.bubble .del-mark { color: #f0524a; font-weight: 600; }
+.bubble.deleted .body { opacity: .92; } /* konten tetap kebaca, sedikit diredupkan */
 
 /* kutipan (reply) di dalam bubble */
 .bubble .quoted {

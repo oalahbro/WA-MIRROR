@@ -836,10 +836,11 @@ function renderBubble(m) {
   const replyPreview = bodyText || PLACEHOLDER_TEXT[m.type] || m.text || "";
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
-  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}${m.type === "sticker" ? " sticker-msg" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+  const metaMark = m.deleted ? `<span class="del-mark">🚫 dihapus</span> · ` : (m.edited ? "diedit · " : "");
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}${m.type === "sticker" ? " sticker-msg" : ""}${m.deleted ? " deleted" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-deleted="${m.deleted ? 1 : 0}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
     <button class="menu-btn" title="Menu pesan">⋮</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
-    <div class="meta">${m.edited ? "diedit · " : ""}${fmtTime(m.timestamp)}</div>
+    <div class="meta">${metaMark}${fmtTime(m.timestamp)}</div>
   </div>`;
 }
 
@@ -1033,6 +1034,17 @@ function markEdited(b) {
   const meta = b.querySelector(".meta");
   if (meta && !meta.dataset.edited) { meta.dataset.edited = "1"; meta.textContent = "diedit · " + meta.textContent; }
 }
+// Tandai bubble sebagai dihapus pengirim (konten asli tetap tampil — anti-delete).
+function markDeletedBubble(b) {
+  if (b.dataset.deleted === "1") return;
+  b.dataset.deleted = "1";
+  b.classList.add("deleted");
+  const meta = b.querySelector(".meta");
+  if (meta) {
+    const ts = Number(b.dataset.ts) || 0;
+    meta.innerHTML = `<span class="del-mark">🚫 dihapus</span> · ${fmtTime(ts)}`;
+  }
+}
 async function submitEdit() {
   const text = getComposeText().trim();
   const id = editingId;
@@ -1132,15 +1144,17 @@ async function refreshNewest() {
   let msgs;
   try { msgs = await api(`/api/messages?jid=${encodeURIComponent(activeJid)}&limit=20`); }
   catch (e) { return; }
-  // Pesan yang teksnya berubah (mis. diedit dari HP) → perbarui bubble di tempat.
+  // Pesan yang teksnya berubah (diedit) / dihapus pengirim → perbarui bubble di tempat.
   for (const m of msgs) {
     let ex = null;
     try { ex = box.querySelector(`.bubble[data-id="${CSS.escape(m.id)}"]`); } catch (e2) {}
-    if (ex && (m.text || "") !== (ex.dataset.text || "")) {
+    if (!ex) continue;
+    if (m.deleted && ex.dataset.deleted !== "1") markDeletedBubble(ex); // hapus = tandai (konten tetap)
+    if ((m.text || "") !== (ex.dataset.text || "")) {
       ex.dataset.text = m.text || ""; ex.dataset.rtext = m.text || "";
       const body = ex.querySelector(".body");
       if (body) body.innerHTML = bbmify(linkify(escapeHtml(m.text || "")));
-      if (m.edited) markEdited(ex);
+      if (m.edited && !m.deleted) markEdited(ex);
     }
   }
   const fresh = msgs.filter((m) => m.timestamp > lastTs).reverse();

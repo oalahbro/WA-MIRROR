@@ -5,7 +5,7 @@ const qrcode = require("qrcode");
 const store = require("./db");
 
 // Baileys v7 di-load lewat dynamic import (ESM) — sama seperti project WA-TIKET.
-let makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser, downloadMediaMessage, proto;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser, downloadMediaMessage, proto, WAMessageStubType;
 async function loadBaileys() {
   if (makeWASocket) return;
   const b = await import("baileys");
@@ -16,6 +16,7 @@ async function loadBaileys() {
   jidNormalizedUser = b.jidNormalizedUser;
   downloadMediaMessage = b.downloadMediaMessage;
   proto = b.proto;
+  WAMessageStubType = b.WAMessageStubType;
 }
 
 const AUTH_DIR = process.env.AUTH_DIR
@@ -467,14 +468,20 @@ async function start() {
     status.lastActivityAt = Date.now();
   });
 
-  // Pesan diedit (dari HP atau echo edit dari mirror) → Baileys emit messages.update
-  // dengan update.message.editedMessage + key.id = id pesan ASLI. Perbarui teks di DB.
+  // Pesan diedit / DIHAPUS → Baileys emit messages.update.
+  //  - edit  : update.message.editedMessage + key.id = id pesan ASLI → perbarui teks.
+  //  - hapus : update.messageStubType = REVOKE (delete-for-everyone), key.id = id pesan
+  //            dihapus → tandai deleted (konten asli tetap, anti-delete).
   sock.ev.on("messages.update", (updates) => {
     for (const u of updates || []) {
-      const em = u.update?.message?.editedMessage?.message;
-      if (!em) continue;
       const jid = u.key?.remoteJid, id = u.key?.id;
       if (!jid || !id) continue;
+      if (WAMessageStubType && u.update?.messageStubType === WAMessageStubType.REVOKE) {
+        store.markDeleted(jid, id);
+        continue;
+      }
+      const em = u.update?.message?.editedMessage?.message;
+      if (!em) continue;
       const { text } = extractContent(em);
       if (text) store.editMessageText(jid, id, text);
     }

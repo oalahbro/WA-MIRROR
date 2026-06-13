@@ -50,6 +50,7 @@ for (const col of [
   "file_name TEXT DEFAULT ''", // nama berkas (utk pesan dokumen / arsip)
   "file_size INTEGER DEFAULT 0", // ukuran berkas (byte) utk pesan dokumen
   "edited INTEGER DEFAULT 0", // 1 bila pesan ini sudah diedit
+  "deleted INTEGER DEFAULT 0", // 1 bila pesan ini dihapus pengirim (delete-for-everyone)
 ]) {
   try { db.exec(`ALTER TABLE messages ADD COLUMN ${col}`); } catch (e) { /* sudah ada */ }
 }
@@ -140,7 +141,7 @@ const _getMessages = db.prepare(`
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
          m.quoted_id, m.quoted_text, m.quoted_sender,
          COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
-         m.media_mime, m.file_name, m.file_size, m.edited
+         m.media_mime, m.file_name, m.file_size, m.edited, m.deleted
   FROM messages m
   LEFT JOIN contacts ct ON ct.jid = m.sender
   LEFT JOIN contacts qc ON qc.jid = m.quoted_sender
@@ -157,7 +158,7 @@ const _getMessagesNewer = db.prepare(`
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
          m.quoted_id, m.quoted_text, m.quoted_sender,
          COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
-         m.media_mime, m.file_name, m.file_size, m.edited
+         m.media_mime, m.file_name, m.file_size, m.edited, m.deleted
   FROM messages m
   LEFT JOIN contacts ct ON ct.jid = m.sender
   LEFT JOIN contacts qc ON qc.jid = m.quoted_sender
@@ -315,6 +316,14 @@ function getMessageRaw(jid, id) {
   return row ? row.raw : "";
 }
 
+// Tandai pesan dihapus pengirim (delete-for-everyone). Konten ASLI tetap disimpan
+// (anti-delete: tetap kebaca di mirror), hanya diberi penanda.
+const _markDeleted = db.prepare("UPDATE messages SET deleted = 1 WHERE chat_jid = @jid AND id = @id");
+function markDeleted(jid, id) {
+  if (!jid || !id) return;
+  _markDeleted.run({ jid, id });
+}
+
 // ---------- bersih-bersih media lama (>N hari) ----------
 // id media (image/video/document/sticker) yang lebih lama dari cutoff (epoch detik) —
 // dipakai untuk menghapus file cache di data/media.
@@ -397,6 +406,7 @@ module.exports = {
   getMediaInfo,
   getMessageById,
   editMessageText,
+  markDeleted,
   getMessageRaw,
   getChatName,
   getContactName,
