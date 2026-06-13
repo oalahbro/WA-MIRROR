@@ -456,6 +456,11 @@ async function start() {
   // Pesan masuk / keluar real-time
   sock.ev.on("messages.upsert", ({ messages, type }) => {
     for (const m of messages) {
+      // DIAGNOSTIK edit: log struktur bila pesan mengandung editedMessage / protocolMessage.
+      const mm = m.message || {};
+      if (mm.editedMessage || mm.protocolMessage) {
+        console.log(`[wa][upsert-edit?] type=${type} fromMe=${m.key?.fromMe} keys=${Object.keys(mm).join(",")} json=${JSON.stringify(mm).slice(0, 700)}`);
+      }
       const info = storeWAMessage(m);
       // type "notify" = pesan benar-benar baru (bukan "append" hasil sync lama).
       // Grup (tag/reply) maupun chat pribadi sama-sama lewat pelacak "belum
