@@ -315,6 +315,22 @@ function getMessageRaw(jid, id) {
   return row ? row.raw : "";
 }
 
+// ---------- bersih-bersih media lama (>N hari) ----------
+// id media (image/video/document/sticker) yang lebih lama dari cutoff (epoch detik) —
+// dipakai untuk menghapus file cache di data/media.
+const _oldMediaIds = db.prepare(
+  `SELECT id FROM messages WHERE timestamp < @cutoff AND type IN ('image','video','document','sticker')`
+);
+function oldMediaIds(cutoff) {
+  return _oldMediaIds.all({ cutoff }).map((r) => r.id);
+}
+// Kosongkan kolom raw (WebMessageInfo terenkode) untuk pesan lebih lama dari cutoff.
+// Hemat DB; media memang tak bisa di-download ulang setelah kedaluwarsa di server WA.
+const _clearOldRaw = db.prepare(`UPDATE messages SET raw = '' WHERE timestamp < @cutoff AND raw <> ''`);
+function clearOldRaw(cutoff) {
+  return _clearOldRaw.run({ cutoff }).changes;
+}
+
 // Nama tampilan grup (dari chats.name). "" bila belum tersinkron.
 function getChatName(jid) {
   const r = _getChatName.get({ jid });
@@ -386,5 +402,7 @@ module.exports = {
   getContactName,
   contactNameByNum,
   searchMessages,
+  oldMediaIds,
+  clearOldRaw,
   stats,
 };

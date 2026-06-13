@@ -26,6 +26,35 @@ const STICKER_DIR = path.resolve(__dirname, "../data/stickers");
 fs.mkdirSync(STICKER_DIR, { recursive: true });
 const stickerFile = (hash) => path.join(STICKER_DIR, safeName(hash) + ".webp");
 
+// Retensi media chat: file cache media (foto/video/dokumen/stiker) untuk pesan yang umurnya
+// > N hari dihapus dari disk + kolom `raw` dikosongkan (hemat ruang; media WA juga sudah
+// kedaluwarsa di server). TIDAK menyentuh stiker favorit (data/stickers) maupun avatar.
+// MEDIA_RETENTION_DAYS di .env mengatur ambang (default 30; set 0 untuk mematikan).
+const MEDIA_RETENTION_DAYS = Number(process.env.MEDIA_RETENTION_DAYS ?? 30);
+async function cleanupOldMedia() {
+  if (!(MEDIA_RETENTION_DAYS > 0)) return { filesDeleted: 0, rawsCleared: 0, disabled: true };
+  const cutoff = Math.floor(Date.now() / 1000) - MEDIA_RETENTION_DAYS * 86400;
+  let filesDeleted = 0, rawsCleared = 0;
+  try {
+    // file dinamai safeName(id); cocokkan ke set id media lama (sudah di-safeName).
+    const oldSet = new Set(store.oldMediaIds(cutoff).map(safeName));
+    let files = [];
+    try { files = await fs.promises.readdir(MEDIA_DIR); } catch (e) { /* folder belum ada */ }
+    for (const f of files) {
+      if (oldSet.has(f)) {
+        try { await fs.promises.unlink(path.join(MEDIA_DIR, f)); filesDeleted++; } catch (e) {}
+      }
+    }
+    rawsCleared = store.clearOldRaw(cutoff);
+  } catch (e) {
+    console.error("[cleanup] media gagal:", e.message);
+  }
+  if (filesDeleted || rawsCleared) {
+    console.log(`[cleanup] media >${MEDIA_RETENTION_DAYS}h: ${filesDeleted} file dihapus, ${rawsCleared} raw dibersihkan`);
+  }
+  return { filesDeleted, rawsCleared };
+}
+
 // Folder cache foto profil (avatar). TTL disk 30 hari; negative-cache (jid tanpa foto)
 // 6 jam agar tidak terus memanggil WA. Fetch ke WA dibatasi konkurensinya (anti ban).
 const AVATAR_DIR = path.resolve(__dirname, "../data/avatars");
@@ -404,6 +433,12 @@ app.post("/api/sticker/send", requireAuth, async (req, res) => {
   }
 });
 
+// Jalankan bersih-bersih media lama sekarang (manual). Return jumlah yang dibersihkan.
+app.post("/api/cleanup", requireAuth, async (req, res) => {
+  try { res.json({ ok: true, ...(await cleanupOldMedia()) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ---------- static UI ----------
 app.use(express.static(path.resolve(__dirname, "../public")));
 
@@ -413,3 +448,9 @@ app.listen(PORT, HOST, () => {
 
 // ---------- start WhatsApp ----------
 wa.start().catch((e) => console.error("[wa] gagal start:", e.message));
+
+// ---------- bersih-bersih media lama (otomatis) ----------
+// 20 dtk setelah boot (jangan ganggu sinkronisasi awal), lalu tiap 24 jam.
+setTimeout(() => cleanupOldMedia().catch(() => {}), 20000);
+const cleanupTimer = setInterval(() => cleanupOldMedia().catch(() => {}), 24 * 3600 * 1000);
+if (cleanupTimer.unref) cleanupTimer.unref();
