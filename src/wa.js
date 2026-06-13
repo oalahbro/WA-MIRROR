@@ -413,7 +413,9 @@ async function start() {
     printQRInTerminal: false,
     markOnlineOnConnect: false, // biar notifikasi tetap masuk ke HP
     syncFullHistory: true,      // minta history sebanyak yang WhatsApp izinkan
-    logger: pino({ level: "silent" }),
+    // Level log Baileys via .env (default silent). Set WA_LOG_LEVEL=warn/debug
+    // sementara untuk diagnosa (mis. konteks gagal decrypt / Bad MAC), lalu balikin.
+    logger: pino({ level: process.env.WA_LOG_LEVEL || "silent" }),
     getMessage: async () => undefined,
   });
 
