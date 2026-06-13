@@ -471,26 +471,19 @@ async function start() {
   // Pesan masuk / keluar real-time
   sock.ev.on("messages.upsert", ({ messages, type }) => {
     for (const m of messages) {
-      // DIAGNOSTIK: tampilkan struktur pesan yg mengandung protocol/edit/deviceSent.
-      const _k = m.message ? Object.keys(m.message) : [];
-      if (_k.some((k) => k === "protocolMessage" || k === "editedMessage" || k === "deviceSentMessage")) {
-        console.log(`[wa][DIAG] fromMe=${m.key?.fromMe} keys=${_k.join(",")} json=${JSON.stringify(m.message).slice(0, 800)}`);
-      }
-      // Edit / hapus bisa datang sbg protocolMessage di sini (mis. edit dari HP) ATAU sbg
-      // messages.update (mis. dari WA Web). Tangani di kedua jalur supaya tak ada yg lewat
-      // (idempoten bila kena dua-duanya).
+      // Edit / hapus bisa datang sbg protocolMessage di sini (mis. dari HP, kadang dibungkus
+      // deviceSentMessage) ATAU sbg messages.update (mis. dari WA Web). Tangani di kedua jalur
+      // supaya tak ada yang lewat (idempoten bila kena dua-duanya).
       const pm = findProtocolMsg(m.message);
       const tgt = m.key?.remoteJid;
       if (pm && pm.key?.id && tgt) {
         if (pm.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT) {
           const { text } = extractContent(pm.editedMessage || {});
-          const rows = text ? store.editMessageText(tgt, pm.key.id, text) : 0;
-          console.log(`[wa] edit(upsert) id=${pm.key.id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 40))}`);
+          if (text) store.editMessageText(tgt, pm.key.id, text);
           continue;
         }
         if (pm.type === proto.Message.ProtocolMessage.Type.REVOKE) {
           store.markDeleted(tgt, pm.key.id);
-          console.log(`[wa] hapus(upsert) id=${pm.key.id}`);
           continue;
         }
       }
@@ -521,8 +514,7 @@ async function start() {
       const em = u.update?.message?.editedMessage?.message;
       if (!em) continue;
       const { text } = extractContent(em);
-      const rows = text ? store.editMessageText(jid, id, text) : 0;
-      console.log(`[wa] edit(update) id=${id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 40))}`);
+      if (text) store.editMessageText(jid, id, text);
     }
   });
 
