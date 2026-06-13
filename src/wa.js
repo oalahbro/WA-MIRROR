@@ -481,9 +481,16 @@ async function start() {
         continue;
       }
       const em = u.update?.message?.editedMessage?.message;
-      if (!em) continue;
+      if (!em) {
+        // DIAGNOSTIK edit: tampilkan struktur update yang tak terdeteksi sbg edit.
+        if (u.update && (u.update.message || u.update.messageStubType !== undefined)) {
+          console.log("[wa][edit?] update tak dikenal:", JSON.stringify(u.update).slice(0, 500));
+        }
+        continue;
+      }
       const { text } = extractContent(em);
-      if (text) store.editMessageText(jid, id, text);
+      const rows = store.editMessageText(jid, id, text);
+      console.log(`[wa] edit masuk id=${id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 60))}`);
     }
   });
 

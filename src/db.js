@@ -306,9 +306,10 @@ const _editChatLast = db.prepare(
   "UPDATE chats SET last_text = @text WHERE jid = @jid AND last_message_time = (SELECT timestamp FROM messages WHERE chat_jid = @jid AND id = @id)"
 );
 function editMessageText(jid, id, text) {
-  if (!jid || !id) return;
-  _editMsg.run({ jid, id, text: text || "" });
+  if (!jid || !id) return 0;
+  const r = _editMsg.run({ jid, id, text: text || "" });
   try { _editChatLast.run({ jid, id, text: text || "" }); } catch (e) { /* abaikan */ }
+  return r.changes;
 }
 
 function getMessageRaw(jid, id) {
