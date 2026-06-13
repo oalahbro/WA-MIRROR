@@ -1590,6 +1590,7 @@ const EMOJI_TABS = [
   { key: "objects",  icon: "💡" },
   { key: "symbols",  icon: "🔣" },
   { key: "bbm",      icon: "🅱️" },
+  { key: "sticker",  icon: "🌟" },
 ];
 // Emoji BBM (kosmetik lokal): token :bNNN: ↔ gambar /bbm/bNNN.png (lihat scripts/fetch-bbm.js).
 const BBM_TOKENS = Array.from({ length: 200 }, (_, i) => ":b" + String(i + 1).padStart(3, "0") + ":");
@@ -1620,6 +1621,9 @@ function emojiButton(val) {
 }
 function renderEmojiGrid() {
   const grid = $("emojiGrid");
+  document.querySelectorAll("#emojiTabs .etab").forEach((t) => t.classList.toggle("active", t.dataset.cat === emojiCat));
+  grid.classList.toggle("stickers", emojiCat === "sticker"); // grid 4-kolom utk stiker
+  if (emojiCat === "sticker") { renderStickerGrid(grid); return; }
   let list = emojiCat === "recent" ? recentEmojis()
     : emojiCat === "bbm" ? BBM_TOKENS
     : (EMOJI[emojiCat] || []);
@@ -1628,7 +1632,23 @@ function renderEmojiGrid() {
   } else {
     grid.innerHTML = list.map(emojiButton).join("");
   }
-  document.querySelectorAll("#emojiTabs .etab").forEach((t) => t.classList.toggle("active", t.dataset.cat === emojiCat));
+}
+
+// Render grid stiker favorit di dalam panel emoji (tab terakhir).
+async function renderStickerGrid(grid) {
+  grid.innerHTML = `<div class="sticker-empty">Memuat…</div>`;
+  let list;
+  try { list = await api("/api/stickers"); } catch (e) { grid.innerHTML = `<div class="sticker-empty">Gagal memuat.</div>`; return; }
+  if (emojiCat !== "sticker") return; // user keburu pindah tab
+  if (!Array.isArray(list) || !list.length) {
+    grid.innerHTML = `<div class="sticker-empty">Belum ada stiker favorit.<br>Simpan dari stiker yang masuk: menu ⋮ pada stiker → Simpan stiker.</div>`;
+    return;
+  }
+  grid.innerHTML = list.map((s) =>
+    `<div class="sticker-cell" data-hash="${escapeHtml(s.hash)}" title="Kirim stiker">` +
+      `<img loading="lazy" src="/api/sticker?hash=${encodeURIComponent(s.hash)}&token=${encodeURIComponent(TOKEN)}" alt="stiker">` +
+      `<button type="button" class="sticker-rm" title="Hapus dari favorit">✕</button>` +
+    `</div>`).join("");
 }
 
 // Sisipkan node pada posisi kursor di editor (contenteditable). Fallback ke akhir.
@@ -1661,10 +1681,11 @@ function toggleEmojiPanel() {
   const panel = $("emojiPanel");
   const willOpen = panel.classList.contains("hidden");
   if (willOpen) {
-    $("stickerPanel").classList.add("hidden");
     if (!emojiBuilt) { buildEmojiTabs(); emojiBuilt = true; }
-    if (recentEmojis().length) emojiCat = "recent";
-    else if (emojiCat === "recent") emojiCat = "smileys";
+    if (emojiCat !== "sticker") {                 // pertahankan tab stiker bila tadinya dibuka di situ
+      if (recentEmojis().length) emojiCat = "recent";
+      else if (emojiCat === "recent") emojiCat = "smileys";
+    }
     renderEmojiGrid();
   }
   panel.classList.toggle("hidden");
@@ -1678,6 +1699,10 @@ $("emojiTabs").addEventListener("click", (e) => {
   renderEmojiGrid();
 });
 $("emojiGrid").addEventListener("click", (e) => {
+  const rm = e.target.closest(".sticker-rm");
+  if (rm) { e.stopPropagation(); const cell = rm.closest(".sticker-cell"); if (cell) removeStickerFav(cell.dataset.hash, cell); return; }
+  const cell = e.target.closest(".sticker-cell");
+  if (cell) { sendStickerFav(cell.dataset.hash); return; }   // klik stiker favorit → kirim
   const b = e.target.closest("button[data-emo]");
   if (b) insertEmoji(b.dataset.emo);   // panel tetap terbuka → bisa pilih beberapa
 });
@@ -1696,45 +1721,11 @@ async function saveSticker(jid, id) {
   } catch (e) { toast("Gagal simpan stiker", "err"); }
 }
 
-function toggleStickerPanel() {
-  const panel = $("stickerPanel");
-  const willOpen = panel.classList.contains("hidden");
-  if (willOpen) { $("emojiPanel").classList.add("hidden"); loadStickerPanel(); }
-  panel.classList.toggle("hidden");
-}
-
-async function loadStickerPanel() {
-  const grid = $("stickerGrid");
-  grid.innerHTML = `<div class="sticker-empty">Memuat…</div>`;
-  let list;
-  try { list = await api("/api/stickers"); } catch (e) { grid.innerHTML = `<div class="sticker-empty">Gagal memuat.</div>`; return; }
-  if (!Array.isArray(list) || !list.length) {
-    grid.innerHTML = `<div class="sticker-empty">Belum ada stiker favorit.<br>Simpan dari stiker yang masuk: menu ⋮ pada stiker → Simpan stiker.</div>`;
-    return;
-  }
-  grid.innerHTML = list.map((s) =>
-    `<div class="sticker-cell" data-hash="${escapeHtml(s.hash)}" title="Kirim stiker">` +
-      `<img loading="lazy" src="/api/sticker?hash=${encodeURIComponent(s.hash)}&token=${encodeURIComponent(TOKEN)}" alt="stiker">` +
-      `<button type="button" class="sticker-rm" title="Hapus dari favorit">✕</button>` +
-    `</div>`).join("");
-}
-
-$("stickerBtn").onclick = (e) => { e.stopPropagation(); toggleStickerPanel(); };
-$("stickerGrid").addEventListener("click", (e) => {
-  const rm = e.target.closest(".sticker-rm");
-  if (rm) { e.stopPropagation(); const cell = rm.closest(".sticker-cell"); if (cell) removeStickerFav(cell.dataset.hash, cell); return; }
-  const cell = e.target.closest(".sticker-cell");
-  if (cell) sendStickerFav(cell.dataset.hash);
-});
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#stickerPanel") && !e.target.closest("#stickerBtn")) $("stickerPanel").classList.add("hidden");
-});
-
 async function removeStickerFav(hash, cell) {
   try {
     await api("/api/sticker/remove", { method: "POST", body: JSON.stringify({ hash }) });
     cell.remove();
-    if (!$("stickerGrid").querySelector(".sticker-cell")) loadStickerPanel(); // tampilkan empty state
+    if (!$("emojiGrid").querySelector(".sticker-cell")) renderEmojiGrid(); // tampilkan empty state
   } catch (e) { toast("Gagal hapus stiker", "err"); }
 }
 
