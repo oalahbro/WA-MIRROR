@@ -471,13 +471,6 @@ async function start() {
   // Pesan masuk / keluar real-time
   sock.ev.on("messages.upsert", ({ messages, type }) => {
     for (const m of messages) {
-      // DIAGNOSTIK: catat aktivitas own-device (fromMe) + pesan protocol/edit/deviceSent,
-      // utk lihat persis bentuk edit dari HP.
-      const _mm = m.message || {};
-      const _keys = Object.keys(_mm);
-      if (m.key?.fromMe || _keys.some((k) => /protocol|edited|deviceSent/i.test(k))) {
-        console.log(`[wa][DIAG] fromMe=${m.key?.fromMe} type=${type} id=${m.key?.id} keys=${_keys.join(",")} json=${JSON.stringify(_mm).slice(0, 600)}`);
-      }
       // Edit / hapus bisa datang sbg protocolMessage di sini (mis. dari HP, kadang dibungkus
       // deviceSentMessage) ATAU sbg messages.update (mis. dari WA Web). Tangani di kedua jalur
       // supaya tak ada yang lewat (idempoten bila kena dua-duanya).
@@ -514,7 +507,6 @@ async function start() {
     for (const u of updates || []) {
       const jid = u.key?.remoteJid, id = u.key?.id;
       if (!jid || !id) continue;
-      console.log(`[wa][DIAG-upd] id=${id} update=${JSON.stringify(u.update || {}).slice(0, 400)}`);
       if (WAMessageStubType && u.update?.messageStubType === WAMessageStubType.REVOKE) {
         store.markDeleted(jid, id);
         continue;
