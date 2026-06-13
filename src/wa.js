@@ -156,6 +156,16 @@ function findContextInfo(message) {
   return (node && node.contextInfo) || null;
 }
 
+// Cari node protocolMessage (edit/revoke/dll) di dalam berbagai pembungkus.
+function findProtocolMsg(message) {
+  if (!message) return null;
+  if (message.protocolMessage) return message.protocolMessage;
+  if (message.editedMessage?.message) return findProtocolMsg(message.editedMessage.message);
+  if (message.ephemeralMessage?.message) return findProtocolMsg(message.ephemeralMessage.message);
+  if (message.viewOnceMessage?.message) return findProtocolMsg(message.viewOnceMessage.message);
+  return null;
+}
+
 // Ambil info kutipan (reply) dari contextInfo bila pesan ini membalas pesan lain.
 function extractContext(message) {
   const ctx = findContextInfo(message);
@@ -456,10 +466,21 @@ async function start() {
   // Pesan masuk / keluar real-time
   sock.ev.on("messages.upsert", ({ messages, type }) => {
     for (const m of messages) {
-      // DIAGNOSTIK edit: log struktur bila pesan mengandung editedMessage / protocolMessage.
-      const mm = m.message || {};
-      if (mm.editedMessage || mm.protocolMessage) {
-        console.log(`[wa][upsert-edit?] type=${type} fromMe=${m.key?.fromMe} keys=${Object.keys(mm).join(",")} json=${JSON.stringify(mm).slice(0, 700)}`);
+      // Edit / hapus bisa datang sbg protocolMessage di sini (mis. edit dari HP) ATAU sbg
+      // messages.update (mis. dari WA Web). Tangani di kedua jalur supaya tak ada yg lewat
+      // (idempoten bila kena dua-duanya).
+      const pm = findProtocolMsg(m.message);
+      const tgt = m.key?.remoteJid;
+      if (pm && pm.key?.id && tgt) {
+        if (pm.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT) {
+          const { text } = extractContent(pm.editedMessage || {});
+          if (text) store.editMessageText(tgt, pm.key.id, text);
+          continue;
+        }
+        if (pm.type === proto.Message.ProtocolMessage.Type.REVOKE) {
+          store.markDeleted(tgt, pm.key.id);
+          continue;
+        }
       }
       const info = storeWAMessage(m);
       // type "notify" = pesan benar-benar baru (bukan "append" hasil sync lama).
@@ -486,16 +507,9 @@ async function start() {
         continue;
       }
       const em = u.update?.message?.editedMessage?.message;
-      if (!em) {
-        // DIAGNOSTIK edit: tampilkan struktur update yang tak terdeteksi sbg edit.
-        if (u.update && (u.update.message || u.update.messageStubType !== undefined)) {
-          console.log("[wa][edit?] update tak dikenal:", JSON.stringify(u.update).slice(0, 500));
-        }
-        continue;
-      }
+      if (!em) continue;
       const { text } = extractContent(em);
-      const rows = store.editMessageText(jid, id, text);
-      console.log(`[wa] edit masuk id=${id} rows=${rows} text=${JSON.stringify(String(text || "").slice(0, 60))}`);
+      if (text) store.editMessageText(jid, id, text);
     }
   });
 
