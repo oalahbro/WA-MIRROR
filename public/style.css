@@ -291,6 +291,8 @@ body {
 
 /* chat list */
 .chat-list { flex: 1; overflow-y: auto; }
+.chat-more { text-align: center; padding: 14px 8px; color: var(--meta, #8696a0); font-size: 12px; }
+.chat-more.hidden { display: none; }
 .chat-item {
   position: relative;
   display: flex; flex-direction: row; align-items: center; gap: 12px;

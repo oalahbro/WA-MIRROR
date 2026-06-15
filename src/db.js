@@ -259,6 +259,62 @@ function getChats(limit = 200) {
   return rows;
 }
 
+// Halaman chat LEBIH LAMA (infinite scroll sidebar): chat dgn last_message_time di bawah
+// cursor @before, tanpa yang pinned (pinned selalu ikut di halaman atas getChats).
+const _getChatsBefore = db.prepare(`
+  SELECT c.jid,
+         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), c.jid) AS name,
+         c.is_group, c.last_message_time, c.last_text, c.pinned,
+         CASE WHEN c.last_message_time > c.last_read_ts THEN (
+           SELECT COUNT(*) FROM messages m
+           WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.timestamp > c.last_read_ts
+         ) ELSE 0 END AS unread,
+         CASE WHEN c.last_message_time > c.last_read_ts THEN (
+           SELECT COUNT(*) FROM messages m
+           WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.mentioned = 1 AND m.timestamp > c.last_read_ts
+         ) ELSE 0 END AS mentions
+  FROM chats c
+  LEFT JOIN contacts ct ON ct.jid = c.jid
+  WHERE c.last_message_time > 0 AND c.last_message_time < @before AND c.pinned = 0
+  ORDER BY c.last_message_time DESC
+  LIMIT @limit
+`);
+function getChatsBefore(before, limit = 100) {
+  const rows = _getChatsBefore.all({ before, limit });
+  for (const r of rows) if (r.last_text) r.last_text = resolveMentions(r.last_text);
+  return rows;
+}
+
+// Cari chat berdasarkan NAMA (nama grup / kontak) lintas SEMUA chat di DB — supaya chat lama
+// yang belum ke-load di sidebar tetap ketemu saat diketik namanya. LIKE pada nama ter-resolve.
+const _searchChats = db.prepare(`
+  SELECT c.jid,
+         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), c.jid) AS name,
+         c.is_group, c.last_message_time, c.last_text, c.pinned,
+         CASE WHEN c.last_message_time > c.last_read_ts THEN (
+           SELECT COUNT(*) FROM messages m
+           WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.timestamp > c.last_read_ts
+         ) ELSE 0 END AS unread,
+         CASE WHEN c.last_message_time > c.last_read_ts THEN (
+           SELECT COUNT(*) FROM messages m
+           WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.mentioned = 1 AND m.timestamp > c.last_read_ts
+         ) ELSE 0 END AS mentions
+  FROM chats c
+  LEFT JOIN contacts ct ON ct.jid = c.jid
+  WHERE c.last_message_time > 0
+    AND COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), c.jid) LIKE @q ESCAPE '\\'
+  ORDER BY c.pinned DESC, c.last_message_time DESC
+  LIMIT @limit
+`);
+function searchChats(q, limit = 50) {
+  const term = String(q || "").trim();
+  if (term.length < 2) return [];
+  const esc = term.replace(/[\\%_]/g, (c) => "\\" + c);
+  const rows = _searchChats.all({ q: "%" + esc + "%", limit: Math.min(Math.max(limit, 1), 100) });
+  for (const r of rows) if (r.last_text) r.last_text = resolveMentions(r.last_text);
+  return rows;
+}
+
 function setPin(jid, pinned) {
   if (!jid) return;
   _setPin.run({ jid, pinned: pinned ? 1 : 0 });
@@ -400,6 +456,8 @@ module.exports = {
   setChatName,
   upsertContact,
   getChats,
+  getChatsBefore,
+  searchChats,
   setPin,
   markRead,
   getMessages,

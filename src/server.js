@@ -181,7 +181,15 @@ app.get("/api/status", requireAuth, (req, res) => {
 
 app.get("/api/chats", requireAuth, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+  const before = parseInt(req.query.before, 10);
+  // ?before=<epoch> -> halaman chat lebih lama (infinite scroll sidebar)
+  if (before > 0) return res.json(store.getChatsBefore(before, Math.min(limit, 200)));
   res.json(store.getChats(limit));
+});
+
+// Cari chat by NAMA lintas semua chat (untuk nemu chat lama yang belum ke-load di sidebar).
+app.get("/api/chats/search", requireAuth, (req, res) => {
+  res.json(store.searchChats(req.query.q || "", 50));
 });
 
 // Pesan terbaru -> lama. ?before=<epoch> untuk load yang lebih lama (scroll ke atas).

@@ -5,6 +5,8 @@ let TOKEN = localStorage.getItem("wa_token") || "";
 let activeJid = null;
 let oldestLoaded = 0;     // timestamp pesan tertua yang sudah dimuat (cursor)
 let allChats = [];
+let loadingOlderChats = false;  // sedang memuat halaman chat lama (infinite scroll sidebar)
+let noMoreChats = false;        // sudah tidak ada chat lebih lama lagi
 let chatPollTimer = null;
 let msgPollTimer = null;
 let chatsLoadedOnce = false;
@@ -198,10 +200,54 @@ function showChatSkeleton() {
 
 async function loadChats() {
   try {
-    allChats = await api("/api/chats");
+    const top = await api("/api/chats");
+    mergeChats(top);          // merge, bukan replace — pertahankan chat lama yg sudah di-scroll
     chatsLoadedOnce = true;
     renderChats();
   } catch (e) {}
+}
+
+// Gabung daftar chat masuk ke allChats (overwrite by jid utk data terbaru), lalu urutkan
+// seperti backend: pinned dulu, lalu terbaru. Dipakai poll (top 200) & load chat lama.
+function mergeChats(incoming) {
+  if (!incoming || !incoming.length) return;
+  const byJid = new Map(allChats.map((c) => [c.jid, c]));
+  for (const c of incoming) byJid.set(c.jid, c);
+  allChats = [...byJid.values()];
+  allChats.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.last_message_time - a.last_message_time);
+}
+
+// Infinite scroll: muat chat lebih lama dari yang tertua saat ini (cursor by last_message_time).
+async function loadOlderChats() {
+  if (loadingOlderChats || noMoreChats || msgSearchMode || !chatsLoadedOnce || !allChats.length) return;
+  const cursor = allChats[allChats.length - 1].last_message_time;
+  if (!cursor) { noMoreChats = true; return; }
+  loadingOlderChats = true;
+  setChatMore();
+  try {
+    const page = await api(`/api/chats?before=${cursor}&limit=100`);
+    const known = new Set(allChats.map((c) => c.jid));
+    const fresh = (page || []).filter((c) => !known.has(c.jid));
+    if (fresh.length) { mergeChats(fresh); renderChats(); }
+    if (!page || page.length < 100) noMoreChats = true;
+  } catch (e) {
+  } finally { loadingOlderChats = false; setChatMore(); }
+}
+
+// Footer status di dasar sidebar (memuat / sudah habis). Dipertahankan reconcileChats.
+function ensureChatMore() {
+  const list = $("chatList");
+  let el = document.getElementById("chatMore");
+  if (!el) { el = document.createElement("div"); el.id = "chatMore"; el.className = "chat-more hidden"; }
+  list.appendChild(el); // selalu jadi anak terakhir
+  setChatMore();
+}
+function setChatMore() {
+  const el = document.getElementById("chatMore");
+  if (!el) return;
+  if (loadingOlderChats) { el.textContent = "Memuat chat lama…"; el.classList.remove("hidden"); }
+  else if (noMoreChats) { el.textContent = "— semua chat dimuat —"; el.classList.remove("hidden"); }
+  else { el.textContent = ""; el.classList.add("hidden"); }
 }
 // Apakah chat ini grup? Andalkan flag dari API, fallback ke suffix jid.
 function isGroupChat(c) { return c.is_group ? true : (c.jid || "").endsWith("@g.us"); }
@@ -229,9 +275,10 @@ function renderChats() {
     return;
   }
 
-  // buang node non-chat-item (skeleton / pesan kosong) bila ada
-  [...list.children].forEach((n) => { if (!n.classList.contains("chat-item")) n.remove(); });
+  // buang node non-chat-item (skeleton / pesan kosong) bila ada; #chatMore dipertahankan
+  [...list.children].forEach((n) => { if (n.id !== "chatMore" && !n.classList.contains("chat-item")) n.remove(); });
   reconcileChats(list, filtered);
+  ensureChatMore();
 }
 
 // Rekonsiliasi: pertahankan node yang ada, hanya update isi yang berubah & atur urutan.
@@ -336,10 +383,25 @@ async function togglePin(jid) {
     toast("Gagal mengubah pin: " + e.message, "err");
   }
 }
+let nameSearchTimer = null;
 $("search").addEventListener("input", () => {
   if (msgSearchMode) msgSearchMode = false;   // mulai mengetik → kembali ke filter chat biasa
   renderChats();
+  const q = $("search").value.trim();
+  clearTimeout(nameSearchTimer);
+  if (q.length >= 2) nameSearchTimer = setTimeout(() => searchChatsByName(q), 220);
 });
+// Cari chat by NAMA lintas DB (chat lama yang belum ke-load) → merge ke allChats lalu render,
+// supaya ngetik nama grup/kontak tetap nemu walau chatnya belum ke-scroll di sidebar.
+async function searchChatsByName(q) {
+  try {
+    const hits = await api(`/api/chats/search?q=${encodeURIComponent(q)}`);
+    if (hits && hits.length && $("search").value.trim() === q && !msgSearchMode) {
+      mergeChats(hits);
+      renderChats();
+    }
+  } catch (e) {}
+}
 // Enter di kotak cari → cari ISI pesan (lintas chat), bukan cuma nama.
 $("search").addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
@@ -392,6 +454,12 @@ $("chatList").addEventListener("click", (e) => {
   if (e.target.closest(".search-exit")) { exitMsgSearch(); return; }
   const r = e.target.closest(".search-result[data-jid]");
   if (r) openChatToMessage(r.dataset.jid, r.dataset.name, r.dataset.id, Number(r.dataset.ts) || 0);
+});
+// Infinite scroll sidebar: dekat dasar → muat chat lebih lama.
+$("chatList").addEventListener("scroll", () => {
+  if (msgSearchMode) return;
+  const el = $("chatList");
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 320) loadOlderChats();
 });
 // Buka chat lalu loncat ke pesan hasil pencarian. Untuk pesan lama, muat langsung
 // jendela di sekitar timestamp-nya (1 panggilan) — bukan scroll dari bawah berkali-kali
