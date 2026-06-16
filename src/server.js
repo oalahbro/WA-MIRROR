@@ -343,6 +343,19 @@ app.post("/api/edit", requireAuth, async (req, res) => {
   }
 });
 
+// Hapus pesan SENDIRI untuk semua (delete-for-everyone). Body: { jid, id }
+// wa.deleteMessage sekaligus markDeleted di DB; echo REVOKE yang masuk idempoten.
+app.post("/api/delete", requireAuth, async (req, res) => {
+  const { jid, id } = req.body || {};
+  if (!jid || !id) return res.status(400).json({ error: "jid, id wajib" });
+  try {
+    await wa.deleteMessage(jid, id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Kirim media (foto/video). Body = biner mentah file; metadata via query.
 const MAX_MEDIA = 64 * 1024 * 1024; // 64 MB
 app.post(

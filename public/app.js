@@ -971,6 +971,11 @@ function openMsgMenu(b, x, y) {
   if (inGroup && !fromMe && (sender.endsWith("@s.whatsapp.net") || sender.endsWith("@lid"))) {
     items.push({ label: "👤 Balas pribadi", act: () => replyPrivately(sender, name, id, text) });
   }
+  // Hapus untuk semua (delete-for-everyone): hanya pesan SENDIRI yang sudah punya
+  // tanda dihapus dilewati. WA membatasi sekitar 2 hari; di luar itu server akan menolak.
+  if (fromMe && b.dataset.deleted !== "1") {
+    items.push({ label: "🗑️ Hapus untuk semua", act: () => deleteForEveryone(id) });
+  }
   const menu = $("msgMenu");
   menu.innerHTML = "";
   items.forEach((it) => {
@@ -985,6 +990,21 @@ function openMsgMenu(b, x, y) {
   menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + "px";
 }
 function closeMsgMenu() { $("msgMenu").classList.add("hidden"); }
+
+// Hapus pesan sendiri untuk semua. Konten asli tetap tampil di mirror (anti-delete),
+// hanya diberi tanda "🚫 dihapus" — sama seperti saat orang lain menarik pesan.
+async function deleteForEveryone(id) {
+  if (!confirm("Hapus pesan ini untuk semua orang?")) return;
+  try {
+    await api("/api/delete", { method: "POST", body: JSON.stringify({ jid: activeJid, id }) });
+    let b = null;
+    try { b = $("messages").querySelector(`.bubble[data-id="${CSS.escape(id)}"]`); } catch (e) {}
+    if (b) markDeletedBubble(b);
+    toast("Pesan dihapus", "ok", 1500);
+  } catch (e) {
+    toast("Gagal hapus: " + e.message, "err");
+  }
+}
 
 async function copyText(t) {
   try {

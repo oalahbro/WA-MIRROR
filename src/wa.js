@@ -570,6 +570,17 @@ async function editMessage(jid, id, text) {
   return sent?.key?.id || null;
 }
 
+// Hapus pesan SENDIRI untuk semua (delete-for-everyone / revoke). WA kirim protocolMessage
+// REVOKE ke chat; mirror sendiri tandai `deleted` (sama seperti anti-delete pesan masuk)
+// supaya konten asli tetap kebaca di mirror.
+async function deleteMessage(jid, id) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!jid || !id) throw new Error("jid, id wajib");
+  await sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe: true, id } });
+  store.markDeleted(jid, id);
+  return true;
+}
+
 // mentions = array jid anggota yang di-tag (mis. ["62812…@s.whatsapp.net"] atau ["…@lid"]).
 // Teks harus memuat "@<nomor>" yang cocok dengan tiap jid (lihat getComposeText di frontend).
 async function sendMessage(jid, text, quotedId, quotedJid, mentions) {
@@ -737,7 +748,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
+module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, deleteMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {
