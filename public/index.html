@@ -106,9 +106,16 @@
       <div id="convView" class="conv-view hidden">
         <header class="conv-head">
           <button id="backBtn" class="back-btn" title="Kembali">←</button>
-          <span id="convAvatar" class="avatar"><span class="avatar-initials"></span><img class="avatar-img" alt=""></span>
-          <div id="convTitle" class="conv-title"></div>
+          <span id="convAvatar" class="avatar conv-head-info" title="Info"><span class="avatar-initials"></span><img class="avatar-img" alt=""></span>
+          <div id="convTitle" class="conv-title conv-head-info" title="Info"></div>
         </header>
+        <div id="infoPanel" class="info-panel hidden">
+          <header class="info-head">
+            <button id="infoClose" class="back-btn" title="Tutup">←</button>
+            <span class="info-head-title">Info</span>
+          </header>
+          <div id="infoBody" class="info-body"></div>
+        </div>
         <div class="messages-wrap">
           <div id="messages" class="messages"></div>
           <div id="convLoading" class="conv-loading hidden"><span class="spinner"></span></div>

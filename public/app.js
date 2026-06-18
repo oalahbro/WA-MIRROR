@@ -619,6 +619,7 @@ async function openChat(jid, title) {
   activeJid = jid;
   oldestLoaded = 0;
   jumpedToHistory = false;   // buka chat normal = mode live (poll jalan)
+  closeChatInfo();           // tutup panel info bila terbuka dari chat sebelumnya
   $("app").classList.add("chat-open");   // mobile: geser ke tampilan percakapan
   $("convEmpty").classList.add("hidden");
   $("convView").classList.remove("hidden");
@@ -667,6 +668,7 @@ async function openChat(jid, title) {
 // Mobile: kembali ke daftar chat
 function backToList() {
   $("app").classList.remove("chat-open");
+  closeChatInfo();
   clearInterval(msgPollTimer);
   activeJid = null;          // lepas active → badge unread jalan normal lagi
   groupMembers = [];
@@ -905,11 +907,77 @@ function renderBubble(m) {
   const replySender = m.from_me ? "Kamu" : (m.sender_name || "").split("@")[0];
 
   const metaMark = m.deleted ? `<span class="del-mark">🚫 dihapus</span> · ` : (m.edited ? "diedit · " : "");
-  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}${m.type === "sticker" ? " sticker-msg" : ""}${m.deleted ? " deleted" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-deleted="${m.deleted ? 1 : 0}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}">
+
+  // reaksi emoji (chip di bawah bubble) — data utk deteksi perubahan saat poll.
+  const reactList = m.reactions || [];
+  const reactTotal = m.react_total || 0;
+  const myReact = m.my_reaction || "";
+  const reactChip = reactTotal
+    ? `<button type="button" class="reactions${myReact ? " mine" : ""}">${reactionsInner(reactList, reactTotal)}</button>` : "";
+
+  return `<div class="bubble ${side}${emojiOnly ? " emoji-only" : ""}${bbmOnly ? " bbm-only" : ""}${m.type === "sticker" ? " sticker-msg" : ""}${m.deleted ? " deleted" : ""}${reactTotal ? " has-react" : ""}" data-ts="${m.timestamp}" data-id="${escapeHtml(m.id)}" data-sender="${escapeHtml(m.sender || "")}" data-text="${escapeHtml(m.text || "")}" data-deleted="${m.deleted ? 1 : 0}" data-rtext="${escapeHtml(replyPreview)}" data-rsender="${escapeHtml(replySender)}" data-react="${escapeHtml(reactSig(reactList, myReact))}" data-reactjson="${escapeHtml(JSON.stringify(reactList))}" data-myreact="${escapeHtml(myReact)}">
     <button class="menu-btn" title="Menu pesan">⋮</button>
     ${senderLabel}${quotedHTML}${mediaHTML}${bodyHTML}
     <div class="meta">${metaMark}${fmtTime(m.timestamp)}</div>
+    ${reactChip}
   </div>`;
+}
+
+// ---------- reaksi emoji ----------
+const QUICK_REACTS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+// Tanda-tangan reaksi (untuk deteksi perubahan saat poll): daftar emoji+jumlah + emoji-ku.
+function reactSig(list, mine) {
+  return (list || []).map((r) => r.emoji + ":" + r.count).join(",") + "|" + (mine || "");
+}
+// Isi chip reaksi: maks 3 emoji unik + total bila > 1.
+function reactionsInner(list, total) {
+  const emojis = (list || []).slice(0, 3).map((r) => `<span class="re-emo">${escapeHtml(r.emoji)}</span>`).join("");
+  const cnt = total > 1 ? `<span class="re-count">${total}</span>` : "";
+  return emojis + cnt;
+}
+// Perbarui chip reaksi sebuah bubble di tempat (dipakai poll & optimistik).
+function setBubbleReactions(b, list, mine) {
+  list = (list || []).filter((r) => r.count > 0);
+  const total = list.reduce((s, r) => s + r.count, 0);
+  b.dataset.react = reactSig(list, mine);
+  b.dataset.reactjson = JSON.stringify(list);
+  b.dataset.myreact = mine || "";
+  let chip = b.querySelector(":scope > .reactions");
+  if (!total) { if (chip) chip.remove(); b.classList.remove("has-react"); return; }
+  if (!chip) { chip = document.createElement("button"); chip.type = "button"; chip.className = "reactions"; b.appendChild(chip); }
+  chip.classList.toggle("mine", !!mine);
+  chip.innerHTML = reactionsInner(list, total);
+  b.classList.add("has-react");
+}
+// Sesuaikan reaksi lokal seketika (sebelum server balas): geser jumlah emoji-ku.
+function applyReactionOptimistic(b, oldEmoji, newEmoji) {
+  let list = [];
+  try { list = JSON.parse(b.dataset.reactjson || "[]"); } catch (e) { list = []; }
+  if (oldEmoji) {
+    const it = list.find((x) => x.emoji === oldEmoji);
+    if (it) { it.count--; if (it.count <= 0) list = list.filter((x) => x !== it); }
+  }
+  if (newEmoji) {
+    const it = list.find((x) => x.emoji === newEmoji);
+    if (it) it.count++; else list.push({ emoji: newEmoji, count: 1 });
+  }
+  setBubbleReactions(b, list, newEmoji);
+}
+// Kirim/ubah/lepas reaksi-ku pada sebuah pesan (klik emoji yg sama = lepas).
+async function react(id, emoji) {
+  if (!activeJid) return;
+  let b = null;
+  try { b = $("messages").querySelector(`.bubble[data-id="${CSS.escape(id)}"]`); } catch (e) {}
+  const mine = b ? (b.dataset.myreact || "") : "";
+  const next = (mine === emoji) ? "" : emoji;
+  if (b) applyReactionOptimistic(b, mine, next);
+  try {
+    await api("/api/react", { method: "POST", body: JSON.stringify({ jid: activeJid, id, emoji: next }) });
+  } catch (e) {
+    if (b) applyReactionOptimistic(b, next, mine); // balikkan bila gagal
+    toast("Gagal reaksi: " + e.message, "err");
+  }
 }
 
 // Event delegation untuk pesan: tombol menu (⋮), klik kutipan, klik media.
@@ -919,6 +987,13 @@ $("messages").addEventListener("click", (e) => {
     e.stopPropagation();
     const b = mbtn.closest(".bubble");
     if (b) { const r = mbtn.getBoundingClientRect(); openMsgMenu(b, r.left, r.bottom + 2); }
+    return;
+  }
+  const rchip = e.target.closest(".reactions");
+  if (rchip) {
+    e.stopPropagation();
+    const b = rchip.closest(".bubble");
+    if (b) { const r = rchip.getBoundingClientRect(); openMsgMenu(b, r.left, r.top - 6); }
     return;
   }
   const q = e.target.closest(".quoted[data-qid]");
@@ -978,6 +1053,20 @@ function openMsgMenu(b, x, y) {
   }
   const menu = $("msgMenu");
   menu.innerHTML = "";
+  // Bar reaksi cepat di atas menu (berlaku utk semua pesan, termasuk media/stiker/pesan orang).
+  // Klik emoji yang sama dengan reaksi-ku = lepas reaksi.
+  const mine = b.dataset.myreact || "";
+  const bar = document.createElement("div");
+  bar.className = "react-bar";
+  QUICK_REACTS.forEach((em) => {
+    const rb = document.createElement("button");
+    rb.type = "button";
+    rb.className = "react-pick" + (em === mine ? " active" : "");
+    rb.textContent = em;
+    rb.onclick = () => { closeMsgMenu(); react(id, em); };
+    bar.appendChild(rb);
+  });
+  menu.appendChild(bar);
   items.forEach((it) => {
     const btn = document.createElement("button");
     btn.textContent = it.label;
@@ -1244,6 +1333,9 @@ async function refreshNewest() {
       if (body) body.innerHTML = bbmify(linkify(escapeHtml(m.text || "")));
       if (m.edited && !m.deleted) markEdited(ex);
     }
+    // reaksi berubah (orang react/lepas) → perbarui chip di tempat
+    const sig = reactSig(m.reactions, m.my_reaction);
+    if ((ex.dataset.react || "") !== sig) setBubbleReactions(ex, m.reactions, m.my_reaction);
   }
   const fresh = msgs.filter((m) => m.timestamp > lastTs).reverse();
   if (fresh.length) {
@@ -1974,6 +2066,101 @@ $("mentionPicker").addEventListener("click", (e) => {
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#mentionPicker") && !e.target.closest("#sendInput")) closeMentionPicker();
+});
+
+// ---------- panel info kontak / grup ----------
+let infoJid = null;
+
+// Avatar besar (header info) + avatar baris anggota memakai pola yang sama dgn list chat.
+function infoAvatarHTML(jid, name, isGroup, cls) {
+  return `<span class="avatar ${cls}"><span class="avatar-initials" style="background:${avatarColor(jid)}">${escapeHtml(avatarInitials(name, isGroup))}</span><img class="avatar-img" alt="" src="${avatarUrl(jid)}"></span>`;
+}
+// "+628…" sederhana (tanpa pemformatan rumit; cukup tambah + di depan digit).
+function prettyNum(num) { const n = String(num || "").replace(/\D/g, ""); return n ? "+" + n : ""; }
+
+function memberRowHTML(p) {
+  const adminBadge = p.admin === "superadmin"
+    ? `<span class="mem-admin">Admin utama</span>`
+    : (p.admin ? `<span class="mem-admin">Admin</span>` : "");
+  const nm = p.me ? "Kamu" : escapeHtml(p.name);
+  return `<div class="mem-row" data-jid="${escapeHtml(p.id)}">
+    ${infoAvatarHTML(p.id, p.name, false, "mem-av")}
+    <span class="mem-main"><span class="mem-name">${nm}</span><span class="mem-num">${escapeHtml(prettyNum(p.num) || p.num)}</span></span>
+    ${adminBadge}
+  </div>`;
+}
+
+function renderChatInfo(info) {
+  const body = $("infoBody");
+  if (info.type === "group") {
+    const created = info.creation
+      ? new Date(info.creation * 1000).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+      : "";
+    const members = info.participants.map(memberRowHTML).join("");
+    body.innerHTML = `
+      <div class="info-top">
+        ${infoAvatarHTML(info.jid, info.subject, true, "info-avatar")}
+        <div class="info-name">${escapeHtml(info.subject)}</div>
+        <div class="info-sub">Grup · ${info.size} anggota</div>
+      </div>
+      ${info.desc ? `<div class="info-section"><div class="info-label">Deskripsi</div><div class="info-desc">${bbmify(linkify(escapeHtml(info.desc)))}</div></div>` : ""}
+      ${created ? `<div class="info-section"><div class="info-meta-line">Dibuat ${escapeHtml(created)}</div></div>` : ""}
+      <div class="info-section">
+        <div class="info-label">${info.size} Anggota</div>
+        <div class="mem-list">${members}</div>
+      </div>`;
+  } else {
+    body.innerHTML = `
+      <div class="info-top">
+        ${infoAvatarHTML(info.jid, info.name, false, "info-avatar")}
+        <div class="info-name">${escapeHtml(info.name)}</div>
+        <div class="info-sub">${escapeHtml(prettyNum(info.num))}</div>
+      </div>
+      ${info.about ? `<div class="info-section"><div class="info-label">Info</div><div class="info-about">${bbmify(linkify(escapeHtml(info.about)))}</div></div>` : ""}
+      <div class="info-section"><div class="info-actions"><button type="button" class="info-act" data-act="message">💬 Kirim pesan</button></div></div>`;
+  }
+}
+
+async function openChatInfo(jid) {
+  if (!jid) return;
+  infoJid = jid;
+  $("infoPanel").classList.remove("hidden");
+  $("infoBody").innerHTML = `<div class="conv-loading"><span class="spinner"></span></div>`;
+  try {
+    const info = await api(`/api/chat-info?jid=${encodeURIComponent(jid)}`);
+    if (infoJid !== jid) return;            // user keburu tutup / pindah
+    renderChatInfo(info);
+  } catch (e) {
+    if (infoJid === jid) $("infoBody").innerHTML = `<div class="list-msg">Gagal memuat info: ${escapeHtml(e.message)}</div>`;
+  }
+}
+function closeChatInfo() { infoJid = null; $("infoPanel").classList.add("hidden"); }
+
+// Klik anggota grup → buka chat pribadinya (resolve @lid → nomor asli bila perlu).
+async function openMemberChat(jid, name) {
+  if (!jid) return;
+  let target = jid;
+  if (jid.endsWith("@lid")) {
+    try { const r = await api(`/api/resolve-jid?jid=${encodeURIComponent(jid)}`); if (r && r.jid) target = r.jid; } catch (e) {}
+  }
+  closeChatInfo();
+  openChat(target, name || target.split("@")[0]);
+}
+
+wireAvatarLoaders($("infoBody"));
+$("infoClose").onclick = closeChatInfo;
+$("convAvatar").addEventListener("click", () => { if (activeJid) openChatInfo(activeJid); });
+$("convTitle").addEventListener("click", () => { if (activeJid) openChatInfo(activeJid); });
+$("infoBody").addEventListener("click", (e) => {
+  const row = e.target.closest(".mem-row[data-jid]");
+  if (row) {
+    const nameEl = row.querySelector(".mem-name");
+    const nm = nameEl && nameEl.textContent !== "Kamu" ? nameEl.textContent : "";
+    if (nameEl && nameEl.textContent === "Kamu") return; // jangan buka chat ke diri sendiri
+    openMemberChat(row.dataset.jid, nm);
+    return;
+  }
+  if (e.target.closest(".info-act[data-act='message']")) { closeChatInfo(); if (window.innerWidth > 768) $("sendInput").focus(); }
 });
 
 // ---------- boot ----------

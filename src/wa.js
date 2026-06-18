@@ -215,6 +215,7 @@ function storeWAMessage(waMsg) {
 
   const { text, type } = extractContent(waMsg.message);
   if (type === "protocol") return null;     // delete/receipt, bukan pesan nyata
+  if (type === "reaction") return null;     // reaksi emoji → ditangani lewat event messages.reaction
   if (!text && type !== "image" && type !== "video") return null;
 
   const sender = waMsg.key.fromMe
@@ -518,6 +519,31 @@ async function start() {
     }
   });
 
+  // Reaksi emoji. Baileys emit `messages.reaction` = [{ key, reaction }]:
+  //  - key       = pesan YANG DIBERI reaksi (key.remoteJid = chat, key.id = id pesan).
+  //  - reaction  = { text: emoji ("" = dilepas), key: pesan REAKSI (key.fromMe = aku?,
+  //                  key.participant = pe-reaksi di grup), senderTimestampMs }.
+  sock.ev.on("messages.reaction", (items) => {
+    for (const it of items || []) {
+      const chatJid = it.key?.remoteJid;
+      const msgId = it.key?.id;
+      if (!chatJid || !msgId) continue;
+      const rk = it.reaction?.key || {};
+      const fromMe = !!rk.fromMe;
+      const reactor = fromMe ? (status.me || "me") : (rk.participant || chatJid);
+      const ts = toEpoch(it.reaction?.senderTimestampMs);
+      store.setReaction({
+        chat_jid: chatJid,
+        msg_id: msgId,
+        reactor,
+        from_me: fromMe,
+        emoji: it.reaction?.text || "",
+        ts,
+      });
+    }
+    status.lastActivityAt = Date.now();
+  });
+
   // Update kontak & metadata
   sock.ev.on("contacts.upsert", (cs) => {
     for (const c of cs) store.upsertContact(c.id, c.name || c.notify || c.verifiedName || "");
@@ -579,6 +605,77 @@ async function deleteMessage(jid, id) {
   await sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe: true, id } });
   store.markDeleted(jid, id);
   return true;
+}
+
+// Kirim / ubah / lepas reaksi emoji pada sebuah pesan. emoji "" = lepas reaksi.
+// Key pesan diambil dari cache (paling akurat, termasuk addressing @lid) atau direkonstruksi
+// dari DB. Reaksi-ku langsung dicatat lokal supaya tampil seketika (echo idempoten).
+async function sendReaction(jid, id, emoji) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!jid || !id) throw new Error("jid, id wajib");
+  let key = msgCache.get(id)?.key;
+  if (!key) {
+    const row = store.getMessageById(jid, id);
+    const isGroup = jid.endsWith("@g.us");
+    key = {
+      remoteJid: jid,
+      fromMe: row ? !!row.from_me : false,
+      id,
+      participant: isGroup ? row?.sender || undefined : undefined,
+    };
+  }
+  await sock.sendMessage(jid, { react: { text: emoji || "", key } });
+  store.setReaction({
+    chat_jid: jid, msg_id: id, reactor: status.me || "me",
+    from_me: true, emoji: emoji || "", ts: Math.floor(Date.now() / 1000),
+  });
+  return true;
+}
+
+// Info kontak / grup untuk panel detail. Grup: subjek, deskripsi, dibuat, daftar
+// anggota (+ admin). Kontak: nomor + "info"/about (via fetchStatus, bila tak privasi).
+async function getChatInfo(jid) {
+  if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
+  if (!jid) throw new Error("jid wajib");
+
+  if (jid.endsWith("@g.us")) {
+    const meta = await sock.groupMetadata(jid);
+    const me = new Set([jidNum(status.me), jidNum(status.meLid)].filter(Boolean));
+    const rank = (x) => (x.admin === "superadmin" ? 0 : x.admin ? 1 : 2);
+    const participants = (meta.participants || [])
+      .map((p) => {
+        const num = jidNum(p.id);
+        return { id: p.id, num, name: store.contactNameByNum(num) || num, admin: p.admin || "", me: me.has(num) };
+      })
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "id"));
+    return {
+      type: "group",
+      jid,
+      subject: meta.subject || store.getChatName(jid) || jidNum(jid),
+      desc: meta.desc || "",
+      creation: toEpoch(meta.creation),
+      owner: meta.owner || meta.ownerPn || "",
+      size: participants.length,
+      participants,
+    };
+  }
+
+  // Kontak / DM
+  const num = jidNum(jid);
+  const name = store.getContactName(jid) || store.contactNameByNum(num) || num;
+  let about = "", aboutAt = 0;
+  try {
+    const res = await sock.fetchStatus(jid);
+    const first = Array.isArray(res) ? res[0] : res;
+    const s = first?.status;
+    if (s && typeof s === "object") {
+      about = s.status || "";
+      if (s.setAt) aboutAt = Math.floor(new Date(s.setAt).getTime() / 1000) || 0;
+    } else if (typeof s === "string") {
+      about = s;
+    }
+  } catch (e) { /* privasi / tak tersedia */ }
+  return { type: "contact", jid, name, num, about, aboutAt };
 }
 
 // mentions = array jid anggota yang di-tag (mis. ["62812…@s.whatsapp.net"] atau ["…@lid"]).
@@ -748,7 +845,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, deleteMessage, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
+module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, deleteMessage, sendReaction, getChatInfo, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {

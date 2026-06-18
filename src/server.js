@@ -356,6 +356,26 @@ app.post("/api/delete", requireAuth, async (req, res) => {
   }
 });
 
+// Reaksi emoji pada pesan. Body: { jid, id, emoji } (emoji "" = lepas reaksi).
+app.post("/api/react", requireAuth, async (req, res) => {
+  const { jid, id, emoji } = req.body || {};
+  if (!jid || !id) return res.status(400).json({ error: "jid, id wajib" });
+  try {
+    await wa.sendReaction(jid, id, typeof emoji === "string" ? emoji : "");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Info kontak / grup (panel detail). ?jid= → { type, ... }.
+app.get("/api/chat-info", requireAuth, async (req, res) => {
+  const jid = req.query.jid;
+  if (!jid) return res.status(400).json({ error: "jid wajib" });
+  try { res.json(await wa.getChatInfo(jid)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Kirim media (foto/video). Body = biner mentah file; metadata via query.
 const MAX_MEDIA = 64 * 1024 * 1024; // 64 MB
 app.post(

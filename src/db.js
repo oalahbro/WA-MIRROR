@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS contacts (
   jid  TEXT PRIMARY KEY,
   name TEXT DEFAULT ''
 );
+
+-- Reaksi emoji per pesan. Satu baris per (chat, pesan, pengirim-reaksi); emoji
+-- kosong = reaksi dilepas (baris dihapus). from_me = 1 bila aku yang bereaksi.
+CREATE TABLE IF NOT EXISTS reactions (
+  chat_jid TEXT NOT NULL,
+  msg_id   TEXT NOT NULL,
+  reactor  TEXT NOT NULL DEFAULT '',
+  from_me  INTEGER DEFAULT 0,
+  emoji    TEXT DEFAULT '',
+  ts       INTEGER DEFAULT 0,
+  PRIMARY KEY (chat_jid, msg_id, reactor)
+);
+CREATE INDEX IF NOT EXISTS idx_react_msg ON reactions(chat_jid, msg_id);
 `);
 
 // Migrasi additif — kolom media + kutipan (reply). Abaikan error jika kolom sudah ada.
@@ -335,7 +348,7 @@ function getMessages(jid, before, limit = 50) {
     if (r.text) r.text = resolveMentions(r.text);
     if (r.quoted_text) r.quoted_text = resolveMentions(r.quoted_text);
   }
-  return rows;
+  return attachReactions(jid, rows);
 }
 
 // Pesan lebih baru dari `after` (epoch), urut ASC. Dipakai loncat-ke-pesan-lama lalu lanjut ke bawah.
@@ -345,7 +358,7 @@ function getMessagesNewer(jid, after, limit = 50) {
     if (r.text) r.text = resolveMentions(r.text);
     if (r.quoted_text) r.quoted_text = resolveMentions(r.quoted_text);
   }
-  return rows;
+  return attachReactions(jid, rows);
 }
 
 function getMediaInfo(jid, id) {
@@ -379,6 +392,66 @@ const _markDeleted = db.prepare("UPDATE messages SET deleted = 1 WHERE chat_jid 
 function markDeleted(jid, id) {
   if (!jid || !id) return;
   _markDeleted.run({ jid, id });
+}
+
+// ---------- reaksi emoji ----------
+// Set/ubah/hapus reaksi seseorang pada sebuah pesan. emoji kosong = lepas reaksi.
+const _setReaction = db.prepare(`
+  INSERT INTO reactions (chat_jid, msg_id, reactor, from_me, emoji, ts)
+  VALUES (@chat_jid, @msg_id, @reactor, @from_me, @emoji, @ts)
+  ON CONFLICT(chat_jid, msg_id, reactor) DO UPDATE SET
+    emoji = excluded.emoji, from_me = excluded.from_me, ts = excluded.ts
+`);
+const _delReaction = db.prepare(
+  "DELETE FROM reactions WHERE chat_jid = @chat_jid AND msg_id = @msg_id AND reactor = @reactor"
+);
+function setReaction({ chat_jid, msg_id, reactor, from_me, emoji, ts }) {
+  if (!chat_jid || !msg_id) return;
+  const r = reactor || "";
+  if (!emoji) { _delReaction.run({ chat_jid, msg_id, reactor: r }); return; }
+  _setReaction.run({
+    chat_jid, msg_id, reactor: r,
+    from_me: from_me ? 1 : 0, emoji, ts: ts || 0,
+  });
+}
+
+// Ambil reaksi untuk sekumpulan id pesan dalam satu chat. Return peta
+// id -> { list: [{emoji,count}], total, mine } (mine = emoji yang KUkirim, "" bila tak ada).
+function reactionsForChat(chat_jid, ids) {
+  const map = {};
+  if (!ids || !ids.length) return map;
+  const ph = ids.map(() => "?").join(",");
+  const rows = db
+    .prepare(`SELECT msg_id, emoji, from_me FROM reactions WHERE chat_jid = ? AND msg_id IN (${ph}) AND emoji <> ''`)
+    .all(chat_jid, ...ids);
+  for (const r of rows) {
+    const e = (map[r.msg_id] || (map[r.msg_id] = { counts: {}, total: 0, mine: "" }));
+    e.counts[r.emoji] = (e.counts[r.emoji] || 0) + 1;
+    e.total++;
+    if (r.from_me) e.mine = r.emoji;
+  }
+  for (const id in map) {
+    const e = map[id];
+    e.list = Object.keys(e.counts)
+      .map((emoji) => ({ emoji, count: e.counts[emoji] }))
+      .sort((a, b) => b.count - a.count);
+    delete e.counts;
+  }
+  return map;
+}
+
+// Lampirkan field `reactions` (array {emoji,count}), `react_total`, `my_reaction`
+// ke tiap baris pesan (in-place). Satu query untuk seluruh batch.
+function attachReactions(jid, rows) {
+  if (!rows || !rows.length) return rows;
+  const map = reactionsForChat(jid, rows.map((r) => r.id));
+  for (const r of rows) {
+    const e = map[r.id];
+    r.reactions = e ? e.list : [];
+    r.react_total = e ? e.total : 0;
+    r.my_reaction = e ? e.mine : "";
+  }
+  return rows;
 }
 
 // ---------- bersih-bersih media lama (>N hari) ----------
@@ -466,6 +539,7 @@ module.exports = {
   getMessageById,
   editMessageText,
   markDeleted,
+  setReaction,
   getMessageRaw,
   getChatName,
   getContactName,

@@ -471,6 +471,72 @@ body {
 .bubble:hover .menu-btn { opacity: 1; }
 .bubble .menu-btn:hover { background: var(--green); color: #fff; }
 
+/* reaksi emoji — chip kecil di tepi bawah bubble */
+.bubble.has-react { margin-bottom: 16px; }
+.bubble .reactions {
+  position: absolute; bottom: -13px; display: inline-flex; align-items: center; gap: 1px;
+  padding: 1px 6px; min-height: 22px; border-radius: 12px; line-height: 1;
+  background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0,0,0,.18); cursor: pointer;
+}
+.bubble.me .reactions { right: 8px; }
+.bubble.other .reactions { left: 8px; }
+.bubble .reactions.mine { border-color: var(--green); background: var(--pill); }
+.bubble .reactions .re-emo { font-size: 14px; }
+.bubble .reactions .re-count { font-size: 11px; color: var(--muted); margin-left: 2px; font-weight: 600; }
+
+/* bar reaksi cepat di atas menu konteks pesan */
+.msg-menu .react-bar {
+  display: flex; gap: 2px; padding: 4px 2px 6px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--divider);
+}
+.msg-menu .react-pick {
+  width: auto; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; padding: 4px 6px; border-radius: 8px;
+  background: transparent; border: none; cursor: pointer; transition: transform .1s, background .1s;
+}
+.msg-menu .react-pick:hover { background: var(--hover); transform: scale(1.18); }
+.msg-menu .react-pick.active { background: var(--pill); }
+
+/* panel info kontak / grup (overlay di area percakapan) */
+.conv-view { position: relative; }
+.conv-head-info { cursor: pointer; }
+.info-panel {
+  position: absolute; inset: 0; z-index: 50; background: var(--bg);
+  display: flex; flex-direction: column; min-height: 0; animation: infoIn .2s ease;
+}
+@keyframes infoIn { from { transform: translateX(14px); opacity: .3; } to { transform: none; opacity: 1; } }
+.info-head { display: flex; align-items: center; gap: 14px; background: var(--panel-2); padding: 14px 18px; }
+.info-head-title { font-weight: 600; font-size: 16px; }
+.info-body { flex: 1; overflow-y: auto; min-height: 0; }
+.info-top {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 28px 18px 22px; background: var(--panel); border-bottom: 1px solid var(--divider);
+}
+.info-avatar { width: 120px; height: 120px; }
+.info-avatar .avatar-initials { font-size: 44px; }
+.info-name { font-size: 21px; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.info-sub { font-size: 14px; color: var(--muted); }
+.info-section { background: var(--panel); padding: 14px 18px; margin-top: 10px; }
+.info-label { font-size: 13px; color: var(--green-dark); font-weight: 600; margin-bottom: 8px; }
+.info-desc, .info-about { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+.info-meta-line { font-size: 13px; color: var(--muted); }
+.mem-list { display: flex; flex-direction: column; }
+.mem-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; cursor: pointer; border-radius: 8px; }
+.mem-row:hover { background: var(--hover); }
+.mem-av { width: 40px; height: 40px; }
+.mem-av .avatar-initials { font-size: 14px; }
+.mem-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.mem-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mem-num { font-size: 12.5px; color: var(--muted); }
+.mem-admin {
+  font-size: 11px; color: var(--green-dark); border: 1px solid var(--green);
+  border-radius: 4px; padding: 1px 6px; flex-shrink: 0;
+}
+.info-actions { display: flex; }
+.info-act { background: transparent; border: none; color: var(--green-dark); font-size: 15px; cursor: pointer; padding: 6px 0; }
+.info-act:hover { text-decoration: underline; }
+
 /* pembatas tanggal (Hari ini / Kemarin / tanggal) */
 .date-sep { display: flex; justify-content: center; margin: 8px 0; }
 .date-sep span {
