@@ -611,12 +611,30 @@ body {
 }
 .lb-content { max-width: 92vw; max-height: 92vh; display: flex; align-items: center; justify-content: center; }
 .lb-media { max-width: 92vw; max-height: 92vh; border-radius: 4px; }
+.lb-media.zoomable { cursor: zoom-in; transition: transform .12s ease; will-change: transform; touch-action: none; }
+.lb-media.grabbing { cursor: grabbing; transition: none; }
 .lb-loading { color: #fff; }
 .lb-close {
   position: absolute; top: 18px; right: 22px; width: 40px; height: 40px; border-radius: 50%;
   background: rgba(255,255,255,.15); color: #fff; border: none; font-size: 16px; cursor: pointer;
 }
 .lb-close:hover { background: rgba(255,255,255,.3); }
+.lb-zoom {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; z-index: 210;
+  background: rgba(0,0,0,.55); border-radius: 24px; padding: 6px 10px;
+}
+.lb-zbtn {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,.15); color: #fff; font-size: 22px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.lb-zbtn:hover { background: rgba(255,255,255,.3); }
+.lb-zbtn:disabled { opacity: .35; cursor: default; }
+.lb-zlevel {
+  color: #fff; font-size: 13px; min-width: 48px; text-align: center;
+  cursor: pointer; user-select: none;
+}
 
 /* ---------- compose / send bar ---------- */
 .compose { background: var(--panel-2); position: relative; }

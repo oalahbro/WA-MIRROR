@@ -1257,18 +1257,29 @@ function quoteBlockHTML(quote) {
   return `<div class="quoted" data-qid="${escapeHtml(quote.id || "")}"><div class="q-sender">${escapeHtml(quote.sender || "")}</div><div class="q-text">${bbmify(escapeHtml(quote.text || ""))}</div></div>`;
 }
 
+// ---- lightbox + zoom gambar ----
+const LB_MIN = 1, LB_MAX = 6, LB_STEP = 0.5;
+let lbImg = null, lbScale = 1, lbTx = 0, lbTy = 0;
+
 function openLightbox(url, kind) {
   const lb = $("lightbox");
   const content = $("lightboxContent");
   content.innerHTML = `<div class="lb-loading"><span class="spinner"></span></div>`;
   lb.classList.remove("hidden");
+  lbImg = null;
   if (kind === "image") {
     const img = new Image();
-    img.className = "lb-media";
-    img.onload = () => { content.innerHTML = ""; content.appendChild(img); };
+    img.className = "lb-media zoomable";
+    img.draggable = false;
+    img.onload = () => {
+      content.innerHTML = ""; content.appendChild(img);
+      lbImg = img; lbSetZoom(1, true);
+      $("lbZoom").classList.remove("hidden");
+    };
     img.onerror = lightboxError;
     img.src = url;
   } else {
+    $("lbZoom").classList.add("hidden");
     const v = document.createElement("video");
     v.className = "lb-media";
     v.controls = true; v.autoplay = true;
@@ -1277,11 +1288,94 @@ function openLightbox(url, kind) {
     v.src = url;
   }
 }
-function closeLightbox() { $("lightbox").classList.add("hidden"); $("lightboxContent").innerHTML = ""; }
+function closeLightbox() {
+  $("lightbox").classList.add("hidden");
+  $("lightboxContent").innerHTML = "";
+  $("lbZoom").classList.add("hidden");
+  lbImg = null; lbScale = 1; lbTx = 0; lbTy = 0;
+}
 function lightboxError() { closeLightbox(); toast("Media tidak tersedia (mungkin sudah kedaluwarsa)", "err"); }
+
+function applyLbTransform() {
+  if (!lbImg) return;
+  lbImg.style.transform = `translate(${lbTx}px, ${lbTy}px) scale(${lbScale})`;
+  lbImg.classList.toggle("zoomable", lbScale <= LB_MIN);
+}
+function lbSetZoom(scale, reset) {
+  lbScale = Math.min(LB_MAX, Math.max(LB_MIN, Math.round(scale * 100) / 100));
+  if (reset || lbScale <= LB_MIN) { lbTx = 0; lbTy = 0; }
+  applyLbTransform();
+  $("lbZoomLevel").textContent = Math.round(lbScale * 100) + "%";
+  $("lbZoomOut").disabled = lbScale <= LB_MIN;
+  $("lbZoomIn").disabled = lbScale >= LB_MAX;
+}
+function lbZoomBy(delta) { if (lbImg) lbSetZoom(lbScale + delta); }
+
+$("lbZoomOut").onclick = () => lbZoomBy(-LB_STEP);
+$("lbZoomIn").onclick = () => lbZoomBy(LB_STEP);
+$("lbZoomLevel").onclick = () => lbSetZoom(1, true);
+
+$("lightboxContent").addEventListener("wheel", (e) => {
+  if (!lbImg) return;
+  e.preventDefault();
+  lbZoomBy(e.deltaY < 0 ? LB_STEP : -LB_STEP);
+}, { passive: false });
+
+$("lightboxContent").addEventListener("dblclick", (e) => {
+  if (!lbImg) return;
+  e.preventDefault();
+  lbSetZoom(lbScale > LB_MIN ? 1 : 2.5, lbScale > LB_MIN);
+});
+
+// geser (pan) saat ter-zoom — pointer + cubit (pinch) di sentuh
+let lbPan = null;
+const lbPointers = new Map();
+let lbPinchDist = 0;
+$("lightboxContent").addEventListener("pointerdown", (e) => {
+  if (!lbImg) return;
+  lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (lbPointers.size === 2) {
+    const p = [...lbPointers.values()];
+    lbPinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    lbPan = null;
+  } else if (lbScale > LB_MIN) {
+    lbPan = { x: e.clientX, y: e.clientY, tx: lbTx, ty: lbTy };
+    lbImg.classList.add("grabbing");
+    lbImg.setPointerCapture(e.pointerId);
+  }
+});
+$("lightboxContent").addEventListener("pointermove", (e) => {
+  if (!lbImg) return;
+  if (lbPointers.has(e.pointerId)) lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (lbPointers.size === 2 && lbPinchDist) {
+    const p = [...lbPointers.values()];
+    const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    lbSetZoom(lbScale * (d / lbPinchDist));
+    lbPinchDist = d;
+    return;
+  }
+  if (lbPan) {
+    lbTx = lbPan.tx + (e.clientX - lbPan.x);
+    lbTy = lbPan.ty + (e.clientY - lbPan.y);
+    applyLbTransform();
+  }
+});
+function lbPointerUp(e) {
+  lbPointers.delete(e.pointerId);
+  if (lbPointers.size < 2) lbPinchDist = 0;
+  if (lbPan) { lbPan = null; if (lbImg) lbImg.classList.remove("grabbing"); }
+}
+$("lightboxContent").addEventListener("pointerup", lbPointerUp);
+$("lightboxContent").addEventListener("pointercancel", lbPointerUp);
+
 $("lightboxClose").onclick = closeLightbox;
 $("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") closeLightbox(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("lightbox").classList.contains("hidden")) closeLightbox(); });
+document.addEventListener("keydown", (e) => {
+  if ($("lightbox").classList.contains("hidden")) return;
+  if (e.key === "Escape") closeLightbox();
+  else if (lbImg && (e.key === "+" || e.key === "=")) lbZoomBy(LB_STEP);
+  else if (lbImg && (e.key === "-" || e.key === "_")) lbZoomBy(-LB_STEP);
+});
 function ensureLoadOlder() {
   const box = $("messages");
   if (box.querySelector(".load-older")) return;
