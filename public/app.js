@@ -27,6 +27,7 @@ let groupMembers = [];       // anggota grup chat aktif (untuk @mention); [] di 
 let mentionState = null;     // { node, start, end } atau null bila picker tertutup
 let mentionFiltered = [];
 let mentionIdx = 0;
+let pendingTasks = [];       // daftar tugas pending (dari server)
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -262,6 +263,7 @@ function renderChats() {
   const q = $("search").value.trim().toLowerCase();
   const list = $("chatList");
   updateFilterCounts();
+  if (chatFilter === "pending") { renderPendingList(); return; }
   let filtered = allChats.filter(matchesFilter);
   if (q) filtered = filtered.filter((c) => (c.name || "").toLowerCase().includes(q));
 
@@ -539,6 +541,7 @@ $("chatFilters").addEventListener("click", (e) => {
   chatFilter = tab.dataset.filter;
   localStorage.setItem("wa_filter", chatFilter);
   document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === chatFilter));
+  if (chatFilter === "pending") loadPendingTasks();
   renderChats();
 });
 
@@ -553,6 +556,7 @@ function updateFilterCounts() {
   setFilterCount("all", priv + grp);
   setFilterCount("private", priv);
   setFilterCount("group", grp);
+  setFilterCount("pending", pendingTasks.length);
 }
 function setFilterCount(filter, n) {
   const el = document.querySelector(`.filter-tab[data-filter="${filter}"] .filter-count`);
@@ -1034,6 +1038,7 @@ function openMsgMenu(b, x, y) {
   const items = [];
   if (text && !isSticker) items.push({ label: "📋 Salin teks", act: () => copyText(text) });
   items.push({ label: "↩️ Balas", act: () => startReply(id, name, text) });
+  items.push({ label: "📌 Tandai sebagai tugas", act: () => addTaskPending(id, text, ts, name, $("convTitle").textContent) });
   if (isSticker) items.push({ label: "⭐ Simpan stiker", act: () => saveSticker(activeJid, id) });
   // Edit: hanya pesan SENDIRI, berupa teks (tanpa media), & masih < 15 menit (batas WhatsApp).
   const ts = Number(b.dataset.ts) || 0;
@@ -1079,6 +1084,89 @@ function openMsgMenu(b, x, y) {
   menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + "px";
 }
 function closeMsgMenu() { $("msgMenu").classList.add("hidden"); }
+
+// ---------- tugas pending ----------
+async function loadPendingTasks() {
+  try { pendingTasks = await api("/api/pending"); } catch (e) { return; }
+  setFilterCount("pending", pendingTasks.length);
+  if (chatFilter === "pending") renderPendingList();
+}
+
+function renderPendingList() {
+  const list = $("chatList");
+  // Bersihkan semua anak kecuali #chatMore; sembunyikan footer infinite-scroll.
+  [...list.children].forEach((n) => { if (n.id !== "chatMore") n.remove(); });
+  const cm = document.getElementById("chatMore");
+  if (cm) cm.classList.add("hidden");
+
+  if (!pendingTasks.length) {
+    const msg = document.createElement("div");
+    msg.className = "list-msg";
+    msg.textContent = "Belum ada tugas. Klik kanan pesan mana pun → Tandai sebagai tugas.";
+    list.insertBefore(msg, cm || null);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  const myNum = myJid ? myJid.split("@")[0] : "";
+  for (const t of pendingTasks) {
+    const isGrp = (t.chat_jid || "").endsWith("@g.us");
+    const chatNameRaw = t.chat_name || t.chat_jid;
+    const preview = (t.msg_text || "").length > 80 ? (t.msg_text || "").slice(0, 80) + "…" : (t.msg_text || "—");
+    const senderIsMe = !t.msg_sender || (myNum && t.msg_sender.startsWith(myNum)) || t.msg_sender === "Kamu";
+    const senderHtml = isGrp && !senderIsMe ? `<div class="pending-sender">${escapeHtml(t.msg_sender)}</div>` : "";
+    const el = document.createElement("div");
+    el.className = "pending-item";
+    el.dataset.pid = t.id;
+    el.innerHTML =
+      `<span class="avatar"><span class="avatar-initials" style="background:${avatarColor(t.chat_jid)}">${avatarInitials(chatNameRaw, isGrp)}</span><img class="avatar-img" alt=""></span>` +
+      `<div class="pending-main">` +
+        `<div class="pending-row"><span class="pending-name">${escapeHtml(chatNameRaw)}</span><span class="pending-time">${fmtTime(t.added_ts)}</span></div>` +
+        senderHtml +
+        `<div class="pending-preview">${escapeHtml(preview)}</div>` +
+      `</div>` +
+      `<button class="pending-done" title="Selesai / hapus tugas">✓</button>`;
+    el.querySelector(".avatar-img").src = avatarUrl(t.chat_jid);
+    const pid = t.id;
+    el.querySelector(".pending-done").addEventListener("click", (e) => { e.stopPropagation(); markTaskDone(pid); });
+    el.addEventListener("click", () => openChatFromPending(t.chat_jid, chatNameRaw, t.msg_id, t.msg_ts));
+    frag.appendChild(el);
+  }
+  list.insertBefore(frag, cm || null);
+  // Listener load/error avatar sudah ada via wireAvatarLoaders($("chatList")) di bawah.
+}
+
+async function markTaskDone(id) {
+  try {
+    await api("/api/pending/remove", { method: "POST", body: JSON.stringify({ id }) });
+    pendingTasks = pendingTasks.filter((t) => t.id !== id);
+    setFilterCount("pending", pendingTasks.length);
+    if (chatFilter === "pending") renderPendingList();
+    toast("✓ Tugas selesai", "ok");
+  } catch (e) { toast("Gagal menghapus tugas", "err"); }
+}
+
+async function addTaskPending(msgId, msgText, msgTs, msgSender, chatName) {
+  try {
+    const r = await api("/api/pending", {
+      method: "POST",
+      body: JSON.stringify({ jid: activeJid, msgId, msgText, msgTs, msgSender, chatName }),
+    });
+    if (r.added) {
+      toast("📌 Ditambahkan ke tugas pending");
+      await loadPendingTasks();
+    } else {
+      toast("Sudah ada di daftar tugas");
+    }
+  } catch (e) { toast("Gagal menambahkan tugas", "err"); }
+}
+
+// Buka chat dan loncat ke pesan yang di-tag pending. Keluar dari mode pending (kembali ke "all").
+async function openChatFromPending(jid, name, msgId, msgTs) {
+  chatFilter = "all";
+  localStorage.setItem("wa_filter", "all");
+  document.querySelectorAll(".filter-tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === "all"));
+  await openChatToMessage(jid, name, msgId, msgTs || 0);
+}
 
 // Hapus pesan sendiri untuk semua. Konten asli tetap tampil di mirror (anti-delete),
 // hanya diberi tanda "🚫 dihapus" — sama seperti saat orang lain menarik pesan.
@@ -2265,6 +2353,7 @@ function startApp() {
   setPill("connecting", "Menghubungkan…");
   checkStatus();
   loadChats();
+  loadPendingTasks();
   clearInterval(chatPollTimer);
   chatPollTimer = setInterval(() => { checkStatus(); loadChats(); }, 4000);
 }

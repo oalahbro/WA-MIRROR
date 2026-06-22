@@ -480,6 +480,25 @@ app.post("/api/cleanup", requireAuth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ---------- tugas pending ----------
+app.get("/api/pending", requireAuth, (req, res) => {
+  res.json(store.listPendingTasks());
+});
+
+app.post("/api/pending", requireAuth, (req, res) => {
+  const { jid, msgId, msgText, msgTs, msgSender, chatName } = req.body || {};
+  if (!jid || !msgId) return res.status(400).json({ error: "jid & msgId wajib" });
+  const added = store.addPendingTask(jid, msgId, msgText, msgTs, msgSender, chatName);
+  res.json({ ok: true, added: !!added });
+});
+
+app.post("/api/pending/remove", requireAuth, (req, res) => {
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: "id wajib" });
+  store.removePendingTask(Number(id));
+  res.json({ ok: true });
+});
+
 // ---------- static UI ----------
 app.use(express.static(path.resolve(__dirname, "../public")));
 

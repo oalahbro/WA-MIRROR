@@ -52,6 +52,19 @@ CREATE TABLE IF NOT EXISTS reactions (
   PRIMARY KEY (chat_jid, msg_id, reactor)
 );
 CREATE INDEX IF NOT EXISTS idx_react_msg ON reactions(chat_jid, msg_id);
+
+-- Tugas pending: pesan yang di-tag sebagai tugas oleh pengguna (lokal, tidak sync ke WA).
+CREATE TABLE IF NOT EXISTS pending_tasks (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_jid   TEXT NOT NULL,
+  msg_id     TEXT NOT NULL,
+  msg_text   TEXT DEFAULT '',
+  msg_ts     INTEGER DEFAULT 0,
+  msg_sender TEXT DEFAULT '',
+  chat_name  TEXT DEFAULT '',
+  added_ts   INTEGER DEFAULT 0,
+  UNIQUE(chat_jid, msg_id)
+);
 `);
 
 // Migrasi additif — kolom media + kutipan (reply). Abaikan error jika kolom sudah ada.
@@ -470,6 +483,25 @@ function clearOldRaw(cutoff) {
   return _clearOldRaw.run({ cutoff }).changes;
 }
 
+// ---------- tugas pending ----------
+const _addPending = db.prepare(`
+  INSERT OR IGNORE INTO pending_tasks
+    (chat_jid, msg_id, msg_text, msg_ts, msg_sender, chat_name, added_ts)
+  VALUES (@chat_jid, @msg_id, @msg_text, @msg_ts, @msg_sender, @chat_name, @added_ts)
+`);
+const _removePending = db.prepare(`DELETE FROM pending_tasks WHERE id = ?`);
+const _listPending = db.prepare(`SELECT * FROM pending_tasks ORDER BY added_ts DESC`);
+
+function addPendingTask(chatJid, msgId, msgText, msgTs, msgSender, chatName) {
+  return _addPending.run({
+    chat_jid: chatJid, msg_id: msgId, msg_text: msgText || '',
+    msg_ts: msgTs || 0, msg_sender: msgSender || '',
+    chat_name: chatName || '', added_ts: Math.floor(Date.now() / 1000),
+  }).changes;
+}
+function removePendingTask(id) { _removePending.run(id); }
+function listPendingTasks() { return _listPending.all(); }
+
 // Nama tampilan grup (dari chats.name). "" bila belum tersinkron.
 function getChatName(jid) {
   const r = _getChatName.get({ jid });
@@ -547,5 +579,8 @@ module.exports = {
   searchMessages,
   oldMediaIds,
   clearOldRaw,
+  addPendingTask,
+  removePendingTask,
+  listPendingTasks,
   stats,
 };
