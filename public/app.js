@@ -1742,11 +1742,13 @@ $("sendForm").addEventListener("submit", (e) => {
   if (text) sendTextMsg(text);
 });
 
-// Enter = kirim, Shift+Enter = baris baru (seperti WA Web).
+// Desktop: Enter = kirim, Shift+Enter = baris baru (seperti WA Web).
+// Mobile (≤768px): Enter = baris baru (keyboard layar tak punya Shift) →
+// biarkan default menyisipkan newline; kirim lewat tombol ➤.
 // Saat picker @mention terbuka, tombol navigasi/pilih "ditelan" lebih dulu.
 $("sendInput").addEventListener("keydown", (e) => {
   if (handleMentionKeydown(e)) return;
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing && window.innerWidth > 768) {
     e.preventDefault();
     $("sendForm").requestSubmit();
   }
