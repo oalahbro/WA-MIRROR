@@ -31,12 +31,25 @@ let pendingTasks = [];       // daftar tugas pending (dari server)
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
-  const res = await fetch(pathname, {
-    ...opts,
-    headers: { "x-auth-token": TOKEN, "Content-Type": "application/json", ...(opts.headers || {}) },
-  });
-  if (res.status === 401) { logout(); throw new Error("unauthorized"); }
-  return res.json();
+  // opts.timeout (ms): batasi waktu tunggu agar request kirim yang menggantung
+  // (koneksi WA lambat) tidak mengunci UI selamanya — gagal-cepat lalu pulih.
+  const { timeout, ...fetchOpts } = opts;
+  let ctrl, timer;
+  if (timeout) { ctrl = new AbortController(); timer = setTimeout(() => ctrl.abort(), timeout); }
+  try {
+    const res = await fetch(pathname, {
+      ...fetchOpts,
+      signal: ctrl ? ctrl.signal : undefined,
+      headers: { "x-auth-token": TOKEN, "Content-Type": "application/json", ...(fetchOpts.headers || {}) },
+    });
+    if (res.status === 401) { logout(); throw new Error("unauthorized"); }
+    return res.json();
+  } catch (err) {
+    if (err && err.name === "AbortError") throw new Error("waktu kirim habis (koneksi lambat)");
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function fmtTime(epoch) {
@@ -1714,10 +1727,16 @@ function setComposeText(text) {
 function setComposePlaceholder(txt) { $("sendInput").dataset.ph = txt; }
 function autoGrowInput() {}   // contenteditable tumbuh sendiri (CSS min/max-height)
 
+// Kunci anti kirim-ganda: selama satu kirim masih berjalan (mis. koneksi WA
+// lambat dan request menggantung), submit berikutnya ditolak agar pesan yang
+// sama tidak menumpuk lalu ter-flush beberapa sekaligus saat koneksi pulih.
+let sending = false;
+
 $("sendForm").addEventListener("submit", (e) => {
   e.preventDefault();
   if (!activeJid) return;
   if (editingId) { submitEdit(); return; }   // mode edit → simpan editan, bukan kirim baru
+  if (sending) { toast("Tunggu, pesan sebelumnya masih dikirim…", "", 1500); return; } // teks dibiarkan utuh
   const text = getComposeText().trim();
   if (pendingFile) { sendMediaMsg(text); return; }
   if (text) sendTextMsg(text);
@@ -1742,6 +1761,7 @@ $("sendInput").addEventListener("paste", (e) => {
 });
 
 async function sendTextMsg(text) {
+  sending = true;                          // kunci anti kirim-ganda
   const mentions = getComposeMentions();   // baca chip mention SEBELUM editor dibersihkan
   const quote = replyTo;          // snapshot lalu bersihkan bar reply
   clearReply();
@@ -1758,7 +1778,7 @@ async function sendTextMsg(text) {
   rebuildDaySeparators();
   scrollToBottom();
   try {
-    const res = await api("/api/send", { method: "POST", body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", mentions }) });
+    const res = await api("/api/send", { method: "POST", timeout: 30000, body: JSON.stringify({ jid: activeJid, text, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", mentions }) });
     finalizeBubble(tmpId, res.id);
     setTimeout(refreshNewest, 600);
   } catch (err) {
@@ -1767,12 +1787,14 @@ async function sendTextMsg(text) {
     if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid); // kembalikan bar reply
     toast("Gagal kirim: " + err.message, "err");
   } finally {
+    sending = false;
     setBtnLoading($("sendBtn"), false);
     $("sendInput").focus();
   }
 }
 
 async function sendMediaMsg(caption) {
+  sending = true;                                       // kunci anti kirim-ganda
   const mentions = caption ? getComposeMentions() : []; // chip mention di caption
   const { file, kind, url } = pendingFile;
   const jid = activeJid;
@@ -1808,11 +1830,21 @@ async function sendMediaMsg(caption) {
   try {
     const qs = new URLSearchParams({ jid, kind, caption, quotedId: quote?.id || "", quotedJid: quote?.srcJid || "", fileName: kind === "document" ? file.name : "", mentions: mentions.join(",") });
     const fallbackType = kind === "image" ? "image/jpeg" : kind === "video" ? "video/mp4" : "application/octet-stream";
-    const res = await fetch("/api/send-media?" + qs.toString(), {
-      method: "POST",
-      headers: { "x-auth-token": TOKEN, "Content-Type": file.type || fallbackType },
-      body: file,
-    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 90000); // gagal-cepat bila upload/koneksi menggantung
+    let res;
+    try {
+      res = await fetch("/api/send-media?" + qs.toString(), {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "x-auth-token": TOKEN, "Content-Type": file.type || fallbackType },
+        body: file,
+      });
+    } catch (e) {
+      throw new Error(e && e.name === "AbortError" ? "waktu kirim habis (koneksi lambat)" : e.message);
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 401) { logout(); throw new Error("unauthorized"); }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
@@ -1824,6 +1856,7 @@ async function sendMediaMsg(caption) {
     if (quote) startReply(quote.id, quote.sender, quote.text, quote.srcJid);
     toast("Gagal kirim media: " + err.message, "err");
   } finally {
+    sending = false;
     setBtnLoading($("sendBtn"), false);
     $("sendInput").focus();
   }
