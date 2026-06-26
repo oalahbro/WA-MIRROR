@@ -262,7 +262,7 @@ function storeWAMessage(waMsg) {
     text,
     type,
     timestamp,
-    chat_name: !jid.endsWith("@g.us") ? waMsg.pushName || "" : "",
+    chat_name: (!waMsg.key.fromMe && !jid.endsWith("@g.us")) ? waMsg.pushName || "" : "",
     thumb,
     media_mime,
     quoted_id: ctx?.id || "",

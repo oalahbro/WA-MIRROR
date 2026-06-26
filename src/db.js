@@ -134,7 +134,12 @@ const _upsertContact = db.prepare(`
 
 const _getChats = db.prepare(`
   SELECT c.jid,
-         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), c.jid) AS name,
+         COALESCE(
+           CASE WHEN c.jid LIKE '%@g.us' THEN NULLIF(c.name, '') END,
+           NULLIF(ct.name, ''),
+           NULLIF(c.name, ''),
+           c.jid
+         ) AS name,
          c.is_group, c.last_message_time, c.last_text, c.pinned,
          CASE WHEN c.last_message_time > c.last_read_ts THEN (
            SELECT COUNT(*) FROM messages m
@@ -227,7 +232,12 @@ function resolveMentions(text) {
 // cukup cepat utk skala personal). Sertakan nama chat + nama pengirim utk ditampilkan.
 const _searchMessages = db.prepare(`
   SELECT m.chat_jid AS jid,
-         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), m.chat_jid) AS chat_name,
+         COALESCE(
+           CASE WHEN m.chat_jid LIKE '%@g.us' THEN NULLIF(c.name, '') END,
+           NULLIF(ct.name, ''),
+           NULLIF(c.name, ''),
+           m.chat_jid
+         ) AS chat_name,
          c.is_group AS is_group,
          m.id, m.from_me, m.text, m.timestamp,
          COALESCE(NULLIF(sc.name, ''), '') AS sender_name
@@ -289,7 +299,12 @@ function getChats(limit = 200) {
 // cursor @before, tanpa yang pinned (pinned selalu ikut di halaman atas getChats).
 const _getChatsBefore = db.prepare(`
   SELECT c.jid,
-         COALESCE(NULLIF(c.name, ''), NULLIF(ct.name, ''), c.jid) AS name,
+         COALESCE(
+           CASE WHEN c.jid LIKE '%@g.us' THEN NULLIF(c.name, '') END,
+           NULLIF(ct.name, ''),
+           NULLIF(c.name, ''),
+           c.jid
+         ) AS name,
          c.is_group, c.last_message_time, c.last_text, c.pinned,
          CASE WHEN c.last_message_time > c.last_read_ts THEN (
            SELECT COUNT(*) FROM messages m
