@@ -147,6 +147,22 @@ body {
 }
 .qr-box img { width: 260px; height: 260px; }
 .qr-wait { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
+/* --- Pairing code tabs --- */
+.pair-tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+.pair-tab {
+  padding: 6px 18px; border-radius: 20px; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--muted); font-size: 13px; cursor: pointer;
+}
+.pair-tab.active { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+/* --- Pairing code section --- */
+.pair-input-row { display: flex; gap: 8px; margin-bottom: 14px; }
+#pairPhone { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; background: var(--input); color: var(--text); }
+#pairBtn { padding: 8px 14px; background: var(--green); color: #fff; border-radius: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+#pairBtn:disabled { opacity: .6; cursor: default; }
+.pair-code-label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.pair-code { font-size: 2rem; letter-spacing: .25em; font-weight: 700; font-family: monospace; color: var(--green-dark); margin-bottom: 10px; }
+.pair-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pair-err { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
 
 /* ---------- app layout ---------- */
 .app { display: flex; height: 100vh; height: 100dvh; position: relative; overflow: hidden; }

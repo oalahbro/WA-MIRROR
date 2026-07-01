@@ -4,3 +4,9 @@ data/
 .env
 *.log
 *.zip
+
+# artefak eksperimen browser-auth-bridge (JANGAN commit — berisi kunci privat)
+extract.json
+_bak_*/
+_pr2676/
+*.tgz

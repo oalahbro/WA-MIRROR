@@ -179,6 +179,29 @@ app.get("/api/status", requireAuth, (req, res) => {
   res.json({ ...wa.getStatus(), stats: store.stats() });
 });
 
+// Alihkan koneksi WA ke mode pairing code (ganti scan QR).
+// Body { phone: "628xxx" }. Berhasil → status.pairingCode terisi via polling /api/status.
+app.post("/api/pairing-mode", requireAuth, async (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone wajib" });
+  try {
+    await wa.setPairingMode(phone);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Kembali ke mode QR dari mode pairing code.
+app.post("/api/reset-pairing", requireAuth, async (req, res) => {
+  try {
+    await wa.resetToQR();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.get("/api/chats", requireAuth, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
   const before = parseInt(req.query.before, 10);

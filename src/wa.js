@@ -50,9 +50,17 @@ const OWNER_JID = toJid(process.env.OWNER_JID);
 const ownerTarget = () => OWNER_JID || status.me; // JID tujuan notifikasi
 
 let sock = null;
+let pairingMode = false;        // true saat mode pairing code (ganti scan QR)
+let pairingPhone = null;        // nomor HP (digit) saat pairing code
+let pairingCodePending = false; // true saat requestPairingCode sedang berjalan (cegah double-call)
+let ignoreNextClose = false;    // cegah auto-reconnect saat sengaja restart socket
+
 const status = {
   connected: false,
   qr: null,
+  pairingCode: null,  // kode 8 karakter saat mode pairing code aktif
+  pairingError: null, // error dari WA saat minta pairing code (mis. 429 rate-overlimit)
+  loggedOut: false,   // true setelah DisconnectReason.loggedOut — auth stale, perlu fresh-pair
   me: null,
   meLid: null,          // identitas LID-ku (dipakai di grup utk deteksi tag/reply)
   reconnecting: false,
@@ -204,6 +212,57 @@ function toEpoch(t) {
   return Number(t) || 0;
 }
 
+// ---------- Kanonikalisasi LID <-> nomor (PN) untuk chat DM ----------
+// WhatsApp bisa mengalamati orang yang sama sebagai <num>@s.whatsapp.net (PN) DAN
+// <lidnum>@lid (LID) → tanpa penyatuan, satu kontak jadi DUA chat. Chat DM kita simpan
+// kanonik ke PN. Lookup di jalur panas HARUS sinkron (getPNForLID Baileys async), jadi
+// pakai Map in-memory yang di-prime dari tabel lid_map + event lid-mapping.update.
+const lidToPn = new Map(); // nomor-bare-LID -> "<num>@s.whatsapp.net"
+
+// SINKRON. PN / @g.us / status passthrough. @lid -> PN bila mapping diketahui; bila
+// belum → biarkan @lid (digabung nanti saat mapping dipelajari; merge idempoten).
+function canonicalDmJid(jid) {
+  if (!jid || !jid.endsWith("@lid")) return jid;
+  return lidToPn.get(jidNum(jid)) || jid;
+}
+
+// Pelajari satu pasangan LID<->PN: simpan ke Map + DB; bila baru, gabungkan chat @lid
+// yang mungkin sudah kepecah ke chat PN-nya.
+function learnLidMapping(lidJid, pnJid) {
+  if (!lidJid || !pnJid) return;
+  const lidNum = jidNum(lidJid);
+  const pn = jidNormalizedUser ? jidNormalizedUser(pnJid) : pnJid;
+  if (!lidNum || !pn || !pn.endsWith("@s.whatsapp.net")) return;
+  const prev = lidToPn.get(lidNum);
+  lidToPn.set(lidNum, pn);
+  store.upsertLidMap(lidNum, pn);
+  if (prev !== pn) {
+    try { store.mergeChat(lidNum + "@lid", pn); }
+    catch (e) { console.error("[wa] mergeChat:", e.message); }
+  }
+}
+
+// Saat connect: prime Map dari DB + gabung yang sudah diketahui, lalu sweep async semua
+// chat @lid tersisa lewat resolveLidToPn (lokal, tanpa jaringan) untuk temukan PN-nya.
+function primeLidMap() {
+  try {
+    for (const r of store.allLidMap()) {
+      lidToPn.set(r.lid_num, r.pn_jid);
+      store.mergeChat(r.lid_num + "@lid", r.pn_jid);
+    }
+  } catch (e) { console.error("[wa] prime lid_map:", e.message); }
+  (async () => {
+    let merged = 0;
+    for (const jid of store.lidDmChats()) {
+      try {
+        const pn = await resolveLidToPn(jid); // getPNForLID: lokal, "" bila tak diketahui
+        if (pn) { learnLidMapping(jid, pn); merged++; }
+      } catch (e) { /* lanjut chat berikutnya */ }
+    }
+    if (merged) console.log("[wa] LID sweep: " + merged + " chat @lid digabung ke nomor");
+  })().catch((e) => console.error("[wa] LID sweep:", e.message));
+}
+
 // Simpan satu pesan WhatsApp ke DB. Lewati pesan kontrol/kosong.
 // Return info ringkas { jid, fromMe, isGroup, kind, text, type, sender, ctx,
 // timestamp } untuk dipakai pemanggil (mis. notifikasi owner), atau null
@@ -212,15 +271,20 @@ function storeWAMessage(waMsg) {
   if (!waMsg || !waMsg.key || !waMsg.message) return null;
   const jid = waMsg.key.remoteJid;
   if (!jid || jid === "status@broadcast") return null;
+  // Kanonikalisasi DM @lid -> nomor (PN) agar satu kontak = satu chat.
+  const chatJid = canonicalDmJid(jid);
 
   const { text, type } = extractContent(waMsg.message);
   if (type === "protocol") return null;     // delete/receipt, bukan pesan nyata
   if (type === "reaction") return null;     // reaksi emoji → ditangani lewat event messages.reaction
   if (!text && type !== "image" && type !== "video") return null;
 
-  const sender = waMsg.key.fromMe
+  const rawSender = waMsg.key.fromMe
     ? status.me || ""
     : waMsg.key.participant || jid; // di grup, participant = pengirim
+  // Kanonikalisasi sender HANYA untuk DM. Di grup, participant @lid HARUS tetap mentah
+  // (dipakai untuk deteksi tag/mention & pencocokan nama anggota).
+  const sender = jid.endsWith("@g.us") ? rawSender : canonicalDmJid(rawSender);
 
   // Ambil thumbnail (jpegThumbnail) + mimetype untuk foto/video, metadata berkas untuk
   // dokumen, dan simpan pesan terenkode (raw) agar bisa di-download kapan pun (lintas
@@ -255,14 +319,14 @@ function storeWAMessage(waMsg) {
   const timestamp = toEpoch(waMsg.messageTimestamp);
 
   store.recordMessage({
-    chat_jid: jid,
+    chat_jid: chatJid,
     id: waMsg.key.id,
     sender,
     from_me: !!waMsg.key.fromMe,
     text,
     type,
     timestamp,
-    chat_name: (!waMsg.key.fromMe && !jid.endsWith("@g.us")) ? waMsg.pushName || "" : "",
+    chat_name: (!waMsg.key.fromMe && !chatJid.endsWith("@g.us")) ? waMsg.pushName || "" : "",
     thumb,
     media_mime,
     quoted_id: ctx?.id || "",
@@ -280,9 +344,9 @@ function storeWAMessage(waMsg) {
   }
 
   return {
-    jid,
+    jid: chatJid,
     fromMe: !!waMsg.key.fromMe,
-    isGroup: jid.endsWith("@g.us"),
+    isGroup: chatJid.endsWith("@g.us"),
     kind,
     text,
     type,
@@ -408,6 +472,9 @@ let sweepTimer = null;
 
 async function start() {
   await loadBaileys();
+  // Pastikan folder auth ada sebelum useMultiFileAuthState — terutama setelah
+  // setPairingMode menghapusnya. saveCreds() crash ENOENT bila folder tidak ada.
+  require("fs").mkdirSync(AUTH_DIR, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -417,6 +484,7 @@ async function start() {
     printQRInTerminal: false,
     markOnlineOnConnect: false, // biar notifikasi tetap masuk ke HP
     syncFullHistory: true,      // minta history sebanyak yang WhatsApp izinkan
+    usePairingCode: pairingMode, // true = pakai kode 8 char, bukan scan QR
     // Level log Baileys via .env (default silent). Set WA_LOG_LEVEL=warn/debug
     // sementara untuk diagnosa (mis. konteks gagal decrypt / Bad MAC), lalu balikin.
     logger: pino({ level: process.env.WA_LOG_LEVEL || "silent" }),
@@ -425,22 +493,77 @@ async function start() {
 
   sock.ev.on("creds.update", saveCreds);
 
+  // Pelajari pemetaan LID<->nomor saat Baileys menemukannya (contact sync / pnForLid /
+  // linked-profiles) → mengkanonikalisasi & menggabungkan chat DM yang kepecah.
+  sock.ev.on("lid-mapping.update", (u) => {
+    try {
+      const items = Array.isArray(u) ? u : [u];
+      for (const it of items) if (it) learnLidMapping(it.lid, it.pn);
+    } catch (e) { console.error("[wa] lid-mapping.update:", e.message); }
+  });
+
   sock.ev.on("connection.update", async (u) => {
     const { connection, lastDisconnect, qr } = u;
     if (qr) {
-      status.qr = await qrcode.toDataURL(qr).catch(() => null);
-      console.log("[wa] QR baru tersedia — buka UI lalu scan.");
+      if (pairingMode && pairingPhone) {
+        // Event qr = sinyal socket sudah connect ke server WA dan siap pairing.
+        // Hanya panggil sekali — QR bisa fire berulang tiap ~20 detik (expire),
+        // tanpa guard ini requestPairingCode terpanggil terus → kode ganti-ganti → HP loop.
+        if (!pairingCodePending && !status.pairingCode) {
+          pairingCodePending = true;
+          console.log("[wa] Minta pairing code untuk JID: " + pairingPhone + "@s.whatsapp.net");
+          // Tangkap error IQ dari WA (mis. 429 rate-overlimit saat terlalu banyak
+          // pairing code di-request dalam waktu singkat). Baileys pakai sendNode
+          // (fire-and-forget), jadi error response perlu di-intercept manual.
+          if (!sock.__pairingErrHooked) {
+            sock.__pairingErrHooked = true;
+            sock.ws.on("CB:iq,,", (node) => {
+              if (node?.attrs?.type === "error") {
+                const errNode = (node.content || []).find((c) => c.tag === "error");
+                const code = errNode?.attrs?.code;
+                const text = errNode?.attrs?.text || "unknown";
+                console.error("[wa] Pairing IQ error dari WA: code=" + code + " text=" + text);
+                if (code === "429" || text === "rate-overlimit") {
+                  status.pairingCode = null;
+                  status.pairingError = "Rate limit WA — terlalu banyak percobaan. Tunggu beberapa jam lalu coba lagi.";
+                  pairingCodePending = false;
+                }
+              }
+            });
+          }
+          sock.requestPairingCode(pairingPhone)
+            .then((code) => {
+              status.pairingCode = code;
+              pairingCodePending = false;
+              console.log("[wa] Pairing code tersedia: " + code);
+            })
+            .catch((e) => {
+              pairingCodePending = false;
+              console.error("[wa] requestPairingCode gagal:", e.message);
+            });
+        }
+      } else {
+        status.qr = await qrcode.toDataURL(qr).catch(() => null);
+        console.log("[wa] QR baru tersedia — buka UI lalu scan.");
+      }
     }
     if (connection === "open") {
       status.connected = true;
       status.reconnecting = false;
       status.qr = null;
+      status.pairingCode = null;
+      status.pairingError = null;
+      status.loggedOut = false;
+      pairingMode = false;
+      pairingPhone = null;
       status.me = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
       status.meLid = sock.user?.lid || null; // mis. "230270494085251:5@lid"
       console.log("[wa] Terhubung sebagai " + status.me + (status.meLid ? " (lid " + status.meLid + ")" : ""));
+      primeLidMap(); // prime peta LID<->nomor + gabung chat DM yang kepecah
     }
     if (connection === "close") {
       status.connected = false;
+      if (ignoreNextClose) { ignoreNextClose = false; return; }
       const code = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
       console.log("[wa] Koneksi tertutup. status=" + code + " reconnect=" + !loggedOut);
@@ -449,6 +572,7 @@ async function start() {
         setTimeout(() => start().catch((e) => console.error("[wa] reconnect gagal:", e.message)), 3000);
       } else {
         status.reconnecting = false;
+        status.loggedOut = true;
         console.log("[wa] Logged out. Hapus folder auth lalu scan ulang.");
         status.qr = null;
       }
@@ -831,11 +955,54 @@ async function getAvatarUrl(jid, kind) {
   }
 }
 
+// Alihkan ke mode pairing code: restart socket dengan usePairingCode:true, lalu
+// requestPairingCode akan dipanggil otomatis saat socket siap. Hasil kode tersimpan
+// di status.pairingCode dan dikembalikan via /api/status polling.
+// Bila sesi sebelumnya sudah logout (status.loggedOut), auth/ dibersihkan dulu agar
+// socket bisa memulai registrasi baru — tanpa ini WA server menolak dan "Connection Closed".
+async function setPairingMode(phone) {
+  if (status.connected) throw new Error("Sudah terhubung ke WhatsApp");
+  const digits = String(phone || "").replace(/\D/g, "").replace(/^0/, "62");
+  if (digits.length < 7) throw new Error("Nomor HP tidak valid");
+  pairingMode = true;
+  pairingPhone = digits;
+  status.pairingCode = null;
+  status.pairingError = null;
+  // Selalu hapus auth saat minta pairing code — auth lama (logout, unregistered,
+  // atau kode sebelumnya tidak dipakai) bikin WA server reject "Connection Closed".
+  const fs = require("fs");
+  try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch (_) {}
+  status.loggedOut = false;
+  console.log("[wa] Auth dihapus untuk fresh pairing.");
+  if (sock) {
+    ignoreNextClose = true;
+    try { sock.end(new Error("pairing mode restart")); } catch (_) {}
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  await start();
+}
+
+// Kembali ke mode QR (dari mode pairing code). Restart socket dengan usePairingCode:false.
+async function resetToQR() {
+  if (status.connected) throw new Error("Sudah terhubung ke WhatsApp");
+  pairingMode = false;
+  pairingPhone = null;
+  status.pairingCode = null;
+  if (sock) {
+    ignoreNextClose = true;
+    try { sock.end(new Error("QR mode restart")); } catch (_) {}
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  await start();
+}
+
 function getStatus() {
   const syncing = Date.now() - status.lastHistoryAt < SYNC_WINDOW_MS;
   return {
     connected: status.connected,
     qr: status.qr,
+    pairingCode: status.pairingCode,
+    pairingError: status.pairingError,
     me: status.me,
     meLid: status.meLid,
     reconnecting: status.reconnecting,
@@ -845,7 +1012,7 @@ function getStatus() {
   };
 }
 
-module.exports = { start, sendMessage, sendMedia, sendSticker, editMessage, deleteMessage, sendReaction, getChatInfo, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
+module.exports = { start, setPairingMode, resetToQR, sendMessage, sendMedia, sendSticker, editMessage, deleteMessage, sendReaction, getChatInfo, downloadMedia, getAvatarUrl, resolveLidToPn, checkNumber, getGroupMembers, getStatus };
 
 // Hook uji internal — hanya aktif saat WA_TEST=1 (tidak memengaruhi produksi).
 if (process.env.WA_TEST === "1") {
@@ -859,6 +1026,9 @@ if (process.env.WA_TEST === "1") {
     notifyPending,
     pendingReply,
     PENDING_MIN,
+    canonicalDmJid,
+    learnLidMapping,
+    lidToPn,
     setSock: (s) => { sock = s; },
   };
 }

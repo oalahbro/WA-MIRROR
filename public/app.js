@@ -28,6 +28,7 @@ let mentionState = null;     // { node, start, end } atau null bila picker tertu
 let mentionFiltered = [];
 let mentionIdx = 0;
 let pendingTasks = [];       // daftar tugas pending (dari server)
+let usingPairingCode = false; // true saat tab "Kode Pairing" aktif di QR overlay
 
 // ---------- helpers ----------
 async function api(pathname, opts = {}) {
@@ -130,6 +131,56 @@ function logout() {
   $("login").classList.remove("hidden");
 }
 
+// ---------- pairing code ----------
+function showQrTab() {
+  usingPairingCode = false;
+  $("tabQr").classList.add("active");
+  $("tabPair").classList.remove("active");
+  $("qrSection").classList.remove("hidden");
+  $("pairSection").classList.add("hidden");
+}
+function showPairTab() {
+  usingPairingCode = true;
+  $("tabPair").classList.add("active");
+  $("tabQr").classList.remove("active");
+  $("pairSection").classList.remove("hidden");
+  $("qrSection").classList.add("hidden");
+  // Pre-fill nomor dari jid yang diketahui (bila pernah terhubung sebelumnya)
+  if (!$("pairPhone").value) {
+    const saved = localStorage.getItem("wa_myPhone") || (myJid ? myJid.split("@")[0] : "");
+    if (saved) $("pairPhone").value = saved;
+  }
+}
+$("tabQr").addEventListener("click", async () => {
+  if (usingPairingCode) {
+    // Restart socket kembali ke mode QR
+    showQrTab();
+    try { await api("/api/reset-pairing", { method: "POST" }); } catch (_) {}
+  }
+});
+$("tabPair").addEventListener("click", () => { if (!usingPairingCode) showPairTab(); });
+
+$("pairBtn").addEventListener("click", async () => {
+  const phone = $("pairPhone").value.trim();
+  $("pairErr").textContent = "";
+  if (!phone) { $("pairErr").textContent = "Masukkan nomor HP terlebih dahulu."; return; }
+  setBtnLoading($("pairBtn"), true);
+  $("pairWait").classList.remove("hidden");
+  $("pairCodeWrap").classList.add("hidden");
+  // Simpan nomor untuk pre-fill berikutnya
+  const digits = phone.replace(/\D/g, "").replace(/^0/, "62");
+  if (digits) localStorage.setItem("wa_myPhone", digits);
+  try {
+    await api("/api/pairing-mode", { method: "POST", body: JSON.stringify({ phone }) });
+    // Kode akan muncul via polling checkStatus → s.pairingCode
+  } catch (e) {
+    $("pairErr").textContent = e.message || "Gagal meminta kode. Coba lagi.";
+    $("pairWait").classList.add("hidden");
+  } finally {
+    setBtnLoading($("pairBtn"), false);
+  }
+});
+
 // ---------- status / QR / sync ----------
 function setPill(cls, text) {
   const pill = $("statusPill");
@@ -146,12 +197,30 @@ async function checkStatus() {
   // --- QR overlay ---
   if (s.connected) {
     $("qrOverlay").classList.add("hidden");
+    usingPairingCode = false;
     if (s.me) { myJid = s.me; $("meLabel").textContent = "📱 " + s.me.split("@")[0]; }
     if (s.meLid) myJidLid = s.meLid;
   } else {
     $("qrOverlay").classList.remove("hidden");
-    if (s.qr) { $("qrImg").src = s.qr; $("qrImg").classList.remove("hidden"); $("qrWait").classList.add("hidden"); }
-    else { $("qrImg").classList.add("hidden"); $("qrWait").classList.remove("hidden"); }
+    if (usingPairingCode) {
+      if (s.pairingError) {
+        $("pairErr").textContent = s.pairingError;
+        $("pairWait").classList.add("hidden");
+        $("pairCodeWrap").classList.add("hidden");
+      } else if (s.pairingCode) {
+        $("pairErr").textContent = "";
+        const fmt = s.pairingCode.match(/.{1,4}/g)?.join("-") || s.pairingCode;
+        $("pairCode").textContent = fmt;
+        $("pairCodeWrap").classList.remove("hidden");
+        $("pairWait").classList.add("hidden");
+      } else {
+        $("pairCodeWrap").classList.add("hidden");
+        // hanya tampil pairWait bila tombol sudah diklik (ada request aktif)
+      }
+    } else {
+      if (s.qr) { $("qrImg").src = s.qr; $("qrImg").classList.remove("hidden"); $("qrWait").classList.add("hidden"); }
+      else { $("qrImg").classList.add("hidden"); $("qrWait").classList.remove("hidden"); }
+    }
   }
 
   // --- status pill (prioritas: terputus > sinkron > terhubung > menghubungkan) ---

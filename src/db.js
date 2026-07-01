@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS pending_tasks (
   added_ts   INTEGER DEFAULT 0,
   UNIQUE(chat_jid, msg_id)
 );
+
+-- Peta LID <-> nomor telepon (PN). Dipakai untuk mengkanonikalisasi chat DM yang
+-- kepecah antara <lidnum>@lid dan <num>@s.whatsapp.net menjadi satu chat (kunci = PN).
+CREATE TABLE IF NOT EXISTS lid_map (
+  lid_num TEXT PRIMARY KEY,  -- nomor bare dari <lidnum>@lid (tanpa domain/device)
+  pn_jid  TEXT NOT NULL,     -- <num>@s.whatsapp.net (ternormalisasi, tanpa device)
+  ts      INTEGER DEFAULT 0
+);
 `);
 
 // Migrasi additif — kolom media + kutipan (reply). Abaikan error jika kolom sudah ada.
@@ -277,6 +285,95 @@ const recordMessage = db.transaction((msg) => {
     timestamp: msg.timestamp || 0,
     text: msg.text || "",
   });
+});
+
+// ---------- LID <-> PN mapping + gabung chat kepecah ----------
+const _upsertLidMap = db.prepare(`
+  INSERT INTO lid_map (lid_num, pn_jid, ts) VALUES (@lid_num, @pn_jid, @ts)
+  ON CONFLICT(lid_num) DO UPDATE SET pn_jid = excluded.pn_jid, ts = excluded.ts
+`);
+const _getPnForLidNum = db.prepare("SELECT pn_jid FROM lid_map WHERE lid_num = @lid_num");
+const _allLidMap = db.prepare("SELECT lid_num, pn_jid FROM lid_map");
+const _lidDmChats = db.prepare("SELECT jid FROM chats WHERE jid LIKE '%@lid'");
+
+function upsertLidMap(lidNum, pnJid) {
+  if (!lidNum || !pnJid) return;
+  _upsertLidMap.run({ lid_num: String(lidNum), pn_jid: String(pnJid), ts: Math.floor(Date.now() / 1000) });
+}
+function pnForLidNum(lidNum) {
+  if (!lidNum) return "";
+  const r = _getPnForLidNum.get({ lid_num: String(lidNum) });
+  return r && r.pn_jid ? r.pn_jid : "";
+}
+function allLidMap() { return _allLidMap.all(); }
+function lidDmChats() { return _lidDmChats.all().map((r) => r.jid); }
+
+// Pindahkan seluruh isi chat `fromJid` ke `toJid` lalu hapus `fromJid`. Idempoten.
+// Menangani konflik PK messages(chat_jid,id): salinan duplikat di `from` dibuang
+// (salinan `to` dipertahankan). Reactions/pending_tasks ikut dipindah (dedupe dulu).
+const _msgIdsBoth = db.prepare(
+  "SELECT id FROM messages WHERE chat_jid = @from AND id IN (SELECT id FROM messages WHERE chat_jid = @to)"
+);
+const _delMsgFromId = db.prepare("DELETE FROM messages WHERE chat_jid = @from AND id = @id");
+const _moveMsgs = db.prepare("UPDATE messages SET chat_jid = @to WHERE chat_jid = @from");
+const _rewriteSenderInChat = db.prepare("UPDATE messages SET sender = @to WHERE chat_jid = @to AND sender = @from");
+const _rewriteQuotedInChat = db.prepare("UPDATE messages SET quoted_sender = @to WHERE chat_jid = @to AND quoted_sender = @from");
+const _delReactDup = db.prepare(
+  "DELETE FROM reactions WHERE chat_jid = @from AND (msg_id, reactor) IN (SELECT msg_id, reactor FROM reactions WHERE chat_jid = @to)"
+);
+const _moveReact = db.prepare("UPDATE reactions SET chat_jid = @to WHERE chat_jid = @from");
+const _delPendDup = db.prepare(
+  "DELETE FROM pending_tasks WHERE chat_jid = @from AND msg_id IN (SELECT msg_id FROM pending_tasks WHERE chat_jid = @to)"
+);
+const _movePend = db.prepare("UPDATE pending_tasks SET chat_jid = @to WHERE chat_jid = @from");
+const _getChatRow = db.prepare("SELECT * FROM chats WHERE jid = @jid");
+const _cntMsgChat = db.prepare("SELECT COUNT(*) n FROM messages WHERE chat_jid = @jid");
+const _ensureChat = db.prepare("INSERT OR IGNORE INTO chats (jid, is_group) VALUES (@to, 0)");
+const _delChat = db.prepare("DELETE FROM chats WHERE jid = @jid");
+const _mergeChatRow = db.prepare(`
+  UPDATE chats SET
+    last_message_time = MAX(last_message_time, @lmt),
+    last_text    = CASE WHEN @lmt >= last_message_time THEN @ltext ELSE last_text END,
+    last_read_ts = MAX(last_read_ts, @lread),
+    pinned       = MAX(pinned, @pinned),
+    name         = CASE WHEN name = '' THEN @name ELSE name END
+  WHERE jid = @to
+`);
+const _foldContact = db.prepare(`
+  INSERT INTO contacts (jid, name)
+  SELECT @to, name FROM contacts WHERE jid = @from AND name <> ''
+  ON CONFLICT(jid) DO UPDATE SET name = CASE WHEN contacts.name = '' THEN excluded.name ELSE contacts.name END
+`);
+const _delContact = db.prepare("DELETE FROM contacts WHERE jid = @from");
+
+const mergeChat = db.transaction((fromJid, toJid) => {
+  if (!fromJid || !toJid || fromJid === toJid) return 0;
+  const from = fromJid, to = toJid;
+  const src = _getChatRow.get({ jid: from });
+  if (!src && _cntMsgChat.get({ jid: from }).n === 0) return 0; // tidak ada apa-apa utk digabung
+  for (const row of _msgIdsBoth.all({ from, to })) _delMsgFromId.run({ from, id: row.id });
+  _moveMsgs.run({ from, to });
+  _rewriteSenderInChat.run({ from, to });
+  _rewriteQuotedInChat.run({ from, to });
+  _delReactDup.run({ from, to });
+  _moveReact.run({ from, to });
+  _delPendDup.run({ from, to });
+  _movePend.run({ from, to });
+  if (src) {
+    _ensureChat.run({ to });
+    _mergeChatRow.run({
+      to,
+      lmt: src.last_message_time || 0,
+      ltext: src.last_text || "",
+      lread: src.last_read_ts || 0,
+      pinned: src.pinned || 0,
+      name: src.name || "",
+    });
+    _delChat.run({ jid: from });
+  }
+  _foldContact.run({ from, to });
+  _delContact.run({ from });
+  return 1;
 });
 
 function setChatName(jid, name) {
@@ -597,5 +694,10 @@ module.exports = {
   addPendingTask,
   removePendingTask,
   listPendingTasks,
+  upsertLidMap,
+  pnForLidNum,
+  allLidMap,
+  lidDmChats,
+  mergeChat,
   stats,
 };

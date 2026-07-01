@@ -30,10 +30,32 @@
   <div id="qrOverlay" class="qr-overlay hidden">
     <div class="qr-box">
       <h2>Hubungkan WhatsApp</h2>
-      <p>Buka WhatsApp di HP → Perangkat tertaut → Tautkan perangkat → scan:</p>
-      <div class="qr-frame">
-        <img id="qrImg" class="hidden" alt="QR" />
-        <div id="qrWait" class="qr-wait"><span class="spinner"></span><span>Menunggu QR…</span></div>
+      <div id="pairTabs" class="pair-tabs">
+        <button id="tabQr" class="pair-tab active">QR Code</button>
+        <button id="tabPair" class="pair-tab">Kode Pairing</button>
+      </div>
+      <!-- Section QR (default) -->
+      <div id="qrSection">
+        <p>Buka WhatsApp di HP → Perangkat tertaut → Tautkan perangkat → scan:</p>
+        <div class="qr-frame">
+          <img id="qrImg" class="hidden" alt="QR" />
+          <div id="qrWait" class="qr-wait"><span class="spinner"></span><span>Menunggu QR…</span></div>
+        </div>
+      </div>
+      <!-- Section Kode Pairing -->
+      <div id="pairSection" class="hidden">
+        <p>Masukkan nomor WA kamu (tanpa + atau spasi):</p>
+        <div class="pair-input-row">
+          <input id="pairPhone" type="tel" placeholder="6281xxx" autocomplete="tel" />
+          <button id="pairBtn"><span class="btn-label">Minta kode</span><span class="btn-spin hidden"></span></button>
+        </div>
+        <div id="pairCodeWrap" class="hidden">
+          <p class="pair-code-label">Masukkan kode ini di HP:</p>
+          <div id="pairCode" class="pair-code"></div>
+          <p class="pair-hint">WA → Perangkat Tertaut → + → Tautkan dengan nomor telepon</p>
+        </div>
+        <div id="pairWait" class="qr-wait hidden"><span class="spinner"></span><span>Menunggu kode…</span></div>
+        <div id="pairErr" class="pair-err"></div>
       </div>
     </div>
   </div>
