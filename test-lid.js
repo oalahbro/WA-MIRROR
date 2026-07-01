@@ -44,6 +44,22 @@ console.log("[4] grup: participant @lid TIDAK dikanonikalkan");
 t.storeWAMessage({ key: { remoteJid: "120363@g.us", id: "G1", fromMe: false, participant: LID }, message: { conversation: "grup" }, messageTimestamp: 3000, pushName: "Budi" });
 ok(q1("SELECT sender s FROM messages WHERE chat_jid='120363@g.us' AND id='G1'").s === LID, "participant @lid tetap mentah di grup");
 
+console.log("[4b] panen mapping dari participantAlt pesan grup -> gabung DM @lid orang itu");
+const LID2 = "777888999@lid";
+const PN2 = "628777888999@s.whatsapp.net";
+store.recordMessage({ chat_jid: LID2, id: "DM_OLD", sender: LID2, text: "dm lama", timestamp: 500 });
+t.storeWAMessage({
+  key: { remoteJid: "120999@g.us", id: "GX", fromMe: false, participant: LID2, participantAlt: PN2 },
+  message: { conversation: "di grup" }, messageTimestamp: 600, pushName: "Cici",
+});
+ok(t.canonicalDmJid(LID2) === PN2, "mapping dipanen dari participantAlt");
+ok(!q1("SELECT 1 x FROM chats WHERE jid=?", LID2), "chat DM @lid orang itu ikut tergabung");
+ok(!!q1("SELECT 1 x FROM messages WHERE chat_jid=? AND id='DM_OLD'", PN2), "pesan DM lama pindah ke PN");
+// bersihkan
+db.prepare("DELETE FROM messages WHERE chat_jid IN (?,?)").run(PN2, "120999@g.us");
+db.prepare("DELETE FROM chats WHERE jid IN (?,?)").run(PN2, "120999@g.us");
+db.prepare("DELETE FROM contacts WHERE jid IN (?,?)").run(PN2, LID2);
+
 console.log("[5] mergeChat: dedup konflik PK (chat_jid,id)");
 const A = "aaa@lid", B = "bbb@s.whatsapp.net";
 store.recordMessage({ chat_jid: A, id: "DUP", sender: A, text: "dari-lid", timestamp: 100 });

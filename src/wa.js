@@ -242,6 +242,15 @@ function learnLidMapping(lidJid, pnJid) {
   }
 }
 
+// Panen pasangan LID<->nomor dari dua jid apa pun (mis. key.participant + key.participantAlt,
+// atau key.remoteJid + key.remoteJidAlt) — WhatsApp menyertakan alt PN pada pesan ber-LID.
+// Ini sumber pemetaan yang ANDAL & tanpa jaringan (lebih lengkap dari getPNForLID lokal).
+function harvestJidPair(a, b) {
+  if (!a || !b) return;
+  if (a.endsWith("@lid") && b.endsWith("@s.whatsapp.net")) learnLidMapping(a, b);
+  else if (b.endsWith("@lid") && a.endsWith("@s.whatsapp.net")) learnLidMapping(b, a);
+}
+
 // Saat connect: prime Map dari DB + gabung yang sudah diketahui, lalu sweep async semua
 // chat @lid tersisa lewat resolveLidToPn (lokal, tanpa jaringan) untuk temukan PN-nya.
 function primeLidMap() {
@@ -271,6 +280,10 @@ function storeWAMessage(waMsg) {
   if (!waMsg || !waMsg.key || !waMsg.message) return null;
   const jid = waMsg.key.remoteJid;
   if (!jid || jid === "status@broadcast") return null;
+  // Panen pemetaan LID<->nomor dari key pesan (alt fields). Dilakukan SEBELUM
+  // kanonikalisasi agar pesan ini pun langsung dipetakan ke nomor bila mungkin.
+  harvestJidPair(waMsg.key.remoteJid, waMsg.key.remoteJidAlt);
+  harvestJidPair(waMsg.key.participant, waMsg.key.participantAlt);
   // Kanonikalisasi DM @lid -> nomor (PN) agar satu kontak = satu chat.
   const chatJid = canonicalDmJid(jid);
 
