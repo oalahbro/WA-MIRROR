@@ -75,6 +75,21 @@ ok(store.mergeChat(A, B) === 0, "merge ulang (from kosong) -> 0");
 ok(store.mergeChat("x@lid", "x@lid") === 0, "guard from===to -> 0");
 ok(store.mergeChat("", "y@s.whatsapp.net") === 0, "guard from kosong -> 0");
 
+console.log("[7] quoted_chat: kutipan lintas-chat (balas pribadi) simpan chat asal");
+const DMJID = "628555000@s.whatsapp.net";
+t.storeWAMessage({
+  key: { remoteJid: DMJID, id: "RP1", fromMe: true },
+  message: { extendedTextMessage: { text: "jawaban pribadi", contextInfo: { stanzaId: "GRPMSG", participant: "628555000@s.whatsapp.net", remoteJid: "120555@g.us", quotedMessage: { conversation: "pesan di grup" } } } },
+  messageTimestamp: 700,
+});
+const rc = q1("SELECT quoted_chat qc, quoted_id qi FROM messages WHERE chat_jid=? AND id='RP1'", DMJID);
+ok(rc && rc.qc === "120555@g.us", "quoted_chat = grup asal tersimpan");
+ok(rc && rc.qi === "GRPMSG", "quoted_id tersimpan");
+const gm = store.getMessages(DMJID, 9999999999, 10).find((x) => x.id === "RP1");
+ok(gm && gm.quoted_chat === "120555@g.us", "getMessages mengembalikan quoted_chat");
+db.prepare("DELETE FROM messages WHERE chat_jid=?").run(DMJID);
+db.prepare("DELETE FROM chats WHERE jid=?").run(DMJID);
+
 for (const s of ["", "-wal", "-shm"]) { try { fs.unlinkSync(process.env.DB_PATH + s); } catch {} }
 console.log(`\n=== HASIL: ${pass} lulus, ${fail} gagal ===`);
 process.exit(fail ? 1 : 0);

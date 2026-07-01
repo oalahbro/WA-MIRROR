@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS lid_map (
 for (const col of [
   "thumb TEXT DEFAULT ''", "media_mime TEXT DEFAULT ''",
   "quoted_id TEXT DEFAULT ''", "quoted_text TEXT DEFAULT ''", "quoted_sender TEXT DEFAULT ''",
+  "quoted_chat TEXT DEFAULT ''", // chat asal pesan yg dikutip (utk kutipan lintas-chat / balas pribadi)
   "raw TEXT DEFAULT ''", // WebMessageInfo terenkode (base64) utk download media lintas-restart
   "mentioned INTEGER DEFAULT 0", // 1 bila pesan ini men-tag aku ATAU membalas pesanku
   "file_name TEXT DEFAULT ''", // nama berkas (utk pesan dokumen / arsip)
@@ -101,8 +102,8 @@ try {
 
 // ---------- prepared statements ----------
 const _insertMsg = db.prepare(`
-  INSERT INTO messages (chat_jid, id, sender, from_me, text, type, timestamp, thumb, media_mime, quoted_id, quoted_text, quoted_sender, raw, mentioned, file_name, file_size)
-  VALUES (@chat_jid, @id, @sender, @from_me, @text, @type, @timestamp, @thumb, @media_mime, @quoted_id, @quoted_text, @quoted_sender, @raw, @mentioned, @file_name, @file_size)
+  INSERT INTO messages (chat_jid, id, sender, from_me, text, type, timestamp, thumb, media_mime, quoted_id, quoted_text, quoted_sender, quoted_chat, raw, mentioned, file_name, file_size)
+  VALUES (@chat_jid, @id, @sender, @from_me, @text, @type, @timestamp, @thumb, @media_mime, @quoted_id, @quoted_text, @quoted_sender, @quoted_chat, @raw, @mentioned, @file_name, @file_size)
   ON CONFLICT(chat_jid, id) DO UPDATE SET
     text          = excluded.text,
     type          = excluded.type,
@@ -112,6 +113,7 @@ const _insertMsg = db.prepare(`
     quoted_id     = CASE WHEN excluded.quoted_id <> ''     THEN excluded.quoted_id     ELSE messages.quoted_id     END,
     quoted_text   = CASE WHEN excluded.quoted_id <> ''     THEN excluded.quoted_text   ELSE messages.quoted_text   END,
     quoted_sender = CASE WHEN excluded.quoted_id <> ''     THEN excluded.quoted_sender ELSE messages.quoted_sender END,
+    quoted_chat   = CASE WHEN excluded.quoted_id <> ''     THEN excluded.quoted_chat   ELSE messages.quoted_chat   END,
     raw           = CASE WHEN excluded.raw <> ''           THEN excluded.raw           ELSE messages.raw           END,
     mentioned     = CASE WHEN excluded.mentioned <> 0      THEN excluded.mentioned     ELSE messages.mentioned     END,
     file_name     = CASE WHEN excluded.file_name <> ''     THEN excluded.file_name     ELSE messages.file_name     END,
@@ -178,7 +180,7 @@ const _getMessages = db.prepare(`
   SELECT m.id, m.sender,
          COALESCE(NULLIF(ct.name, ''), m.sender) AS sender_name,
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
-         m.quoted_id, m.quoted_text, m.quoted_sender,
+         m.quoted_id, m.quoted_text, m.quoted_sender, m.quoted_chat,
          COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
          m.media_mime, m.file_name, m.file_size, m.edited, m.deleted
   FROM messages m
@@ -195,7 +197,7 @@ const _getMessagesNewer = db.prepare(`
   SELECT m.id, m.sender,
          COALESCE(NULLIF(ct.name, ''), m.sender) AS sender_name,
          m.from_me, m.text, m.type, m.timestamp, m.thumb,
-         m.quoted_id, m.quoted_text, m.quoted_sender,
+         m.quoted_id, m.quoted_text, m.quoted_sender, m.quoted_chat,
          COALESCE(NULLIF(qc.name, ''), '') AS quoted_sender_name,
          m.media_mime, m.file_name, m.file_size, m.edited, m.deleted
   FROM messages m
@@ -273,6 +275,7 @@ const recordMessage = db.transaction((msg) => {
     quoted_id: msg.quoted_id || "",
     quoted_text: msg.quoted_text || "",
     quoted_sender: msg.quoted_sender || "",
+    quoted_chat: msg.quoted_chat || "",
     raw: msg.raw || "",
     mentioned: msg.mentioned ? 1 : 0,
     file_name: msg.file_name || "",

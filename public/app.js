@@ -985,7 +985,7 @@ function renderBubble(m) {
   let quotedHTML = "";
   if (m.quoted_id) {
     const qs = quotedLabel(m.quoted_sender, m.quoted_sender_name);
-    quotedHTML = `<div class="quoted" data-qid="${escapeHtml(m.quoted_id)}">${qs ? `<div class="q-sender">${escapeHtml(qs)}</div>` : ""}<div class="q-text">${bbmify(escapeHtml(m.quoted_text || "(media)"))}</div></div>`;
+    quotedHTML = `<div class="quoted" data-qid="${escapeHtml(m.quoted_id)}" data-qchat="${escapeHtml(m.quoted_chat || "")}">${qs ? `<div class="q-sender">${escapeHtml(qs)}</div>` : ""}<div class="q-text">${bbmify(escapeHtml(m.quoted_text || "(media)"))}</div></div>`;
   }
 
   // preview untuk dipakai saat pesan ini DIBALAS
@@ -1083,7 +1083,18 @@ $("messages").addEventListener("click", (e) => {
     return;
   }
   const q = e.target.closest(".quoted[data-qid]");
-  if (q) { scrollToMessage(q.dataset.qid); return; }
+  if (q) {
+    const qchat = q.dataset.qchat || "";
+    // Kutipan lintas-chat (mis. "balas pribadi": pesan asli di grup) → buka chat asal
+    // & loncat ke pesannya, bukan cari di chat sekarang (yang pasti tak ada).
+    if (qchat && qchat !== activeJid) {
+      const nm = (allChats.find((c) => c.jid === qchat) || {}).name || "";
+      openChatToMessage(qchat, nm, q.dataset.qid, 0);
+    } else {
+      scrollToMessage(q.dataset.qid);
+    }
+    return;
+  }
   const dc = e.target.closest(".doc-chip[data-full]");
   if (dc) { downloadDoc(dc.dataset.full, dc.dataset.name); return; }
   const rt = e.target.closest(".media-retry");
@@ -1424,7 +1435,7 @@ function scrollToMessage(id) {
 }
 function quoteBlockHTML(quote) {
   if (!quote) return "";
-  return `<div class="quoted" data-qid="${escapeHtml(quote.id || "")}"><div class="q-sender">${escapeHtml(quote.sender || "")}</div><div class="q-text">${bbmify(escapeHtml(quote.text || ""))}</div></div>`;
+  return `<div class="quoted" data-qid="${escapeHtml(quote.id || "")}" data-qchat="${escapeHtml(quote.srcJid || "")}"><div class="q-sender">${escapeHtml(quote.sender || "")}</div><div class="q-text">${bbmify(escapeHtml(quote.text || ""))}</div></div>`;
 }
 
 // ---- lightbox + zoom gambar ----

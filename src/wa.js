@@ -186,6 +186,9 @@ function extractContext(message) {
     id: ctx.stanzaId || "",
     sender: ctx.participant || "",
     text: q.text || "",
+    // chat asal pesan yg dikutip. Diisi Baileys saat kutipan LINTAS-CHAT (mis. "balas
+    // pribadi": pesan asli di grup, dikirim ke DM). Kosong untuk reply biasa (satu chat).
+    chat: ctx.remoteJid || "",
   };
 }
 
@@ -345,6 +348,8 @@ function storeWAMessage(waMsg) {
     quoted_id: ctx?.id || "",
     quoted_text: ctx?.text || "",
     quoted_sender: ctx?.sender || "",
+    quoted_chat: canonicalDmJid(ctx?.chat || ""), // chat asal (kutipan lintas-chat) → kanonik
+
     raw,
     mentioned,
     file_name,
