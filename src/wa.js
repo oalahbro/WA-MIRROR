@@ -37,15 +37,19 @@ const OWNER_FORWARD = process.env.OWNER_NOTIFY_FORWARD !== "0";
 const OWNER_PENDING_NOTIFY = process.env.OWNER_PENDING_NOTIFY !== "0";
 const PENDING_MIN = Number(process.env.OWNER_PENDING_MINUTES) || 5;
 
-// Nomor tujuan notifikasi. Kosongkan = kirim ke diri sendiri (nomor yang login).
-// Isi nomor lain (mis. 6281234567890) bila ingin notif dikirim ke HP terpisah.
-function toJid(num) {
-  const s = String(num || "").trim();
+// Normalisasi tujuan kirim: terima JID lengkap ATAU nomor polos (08xx / 628xx / +62xx).
+// Nomor polos → 628xx@s.whatsapp.net (lewat normNum agar awalan "0" dikonversi ke "62").
+function normalizeJid(input) {
+  const s = String(input || "").trim();
   if (!s) return "";
   if (s.includes("@")) return s;                  // sudah berbentuk jid
-  const digits = s.replace(/[^0-9]/g, "");
+  const digits = normNum(s);
   return digits ? digits + "@s.whatsapp.net" : "";
 }
+
+// Nomor tujuan notifikasi. Kosongkan = kirim ke diri sendiri (nomor yang login).
+// Isi nomor lain (mis. 6281234567890) bila ingin notif dikirim ke HP terpisah.
+const toJid = (num) => normalizeJid(num);
 const OWNER_JID = toJid(process.env.OWNER_JID);
 const ownerTarget = () => OWNER_JID || status.me; // JID tujuan notifikasi
 
@@ -715,7 +719,7 @@ function buildQuoted(jid, quotedId, srcJid) {
   if (!quotedId) return undefined;
   const cached = msgCache.get(quotedId);
   if (cached) return cached;
-  const lookupJid = srcJid || jid;
+  const lookupJid = normalizeJid(srcJid) || jid;
   const row = store.getMessageById(lookupJid, quotedId);
   if (!row) return undefined;
   const isGroup = lookupJid.endsWith("@g.us");
@@ -823,12 +827,13 @@ async function getChatInfo(jid) {
 // mentions = array jid anggota yang di-tag (mis. ["62812…@s.whatsapp.net"] atau ["…@lid"]).
 // Teks harus memuat "@<nomor>" yang cocok dengan tiap jid (lihat getComposeText di frontend).
 async function sendMessage(jid, text, quotedId, quotedJid, mentions) {
+  jid = normalizeJid(jid);
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   const opts = {};
   const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
   const content = { text };
-  if (Array.isArray(mentions) && mentions.length) content.mentions = mentions;
+  if (Array.isArray(mentions) && mentions.length) content.mentions = mentions.map(normalizeJid).filter(Boolean);
   const sent = await sock.sendMessage(jid, content, opts);
   return sent?.key?.id || null;
 }
@@ -836,6 +841,7 @@ async function sendMessage(jid, text, quotedId, quotedJid, mentions) {
 // Kirim foto / video / dokumen. buffer = isi file (Buffer),
 // kind = "image" | "video" | "document". fileName dipakai untuk dokumen/arsip.
 async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileName, quotedJid, mentions) {
+  jid = normalizeJid(jid);
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   if (!buffer || !buffer.length) throw new Error("file kosong");
   let content;
@@ -854,7 +860,7 @@ async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileNam
   }
   if (caption) content.caption = caption;
   // Mention hanya bermakna bila ada caption (teks yang memuat "@<nomor>").
-  if (caption && Array.isArray(mentions) && mentions.length) content.mentions = mentions;
+  if (caption && Array.isArray(mentions) && mentions.length) content.mentions = mentions.map(normalizeJid).filter(Boolean);
   const opts = {};
   const quoted = buildQuoted(jid, quotedId, quotedJid);
   if (quoted) opts.quoted = quoted;
@@ -865,6 +871,7 @@ async function sendMedia(jid, kind, buffer, mimetype, caption, quotedId, fileNam
 // Kirim stiker (buffer WebP — mis. dari favorit yang tersimpan; sudah format stiker WA
 // jadi tak perlu konversi). Bisa membalas pesan lain (quotedId).
 async function sendSticker(jid, buffer, quotedId, quotedJid) {
+  jid = normalizeJid(jid);
   if (!sock || !status.connected) throw new Error("WhatsApp belum terhubung");
   if (!buffer || !buffer.length) throw new Error("stiker kosong");
   const opts = {};
